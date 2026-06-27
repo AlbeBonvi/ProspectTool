@@ -278,15 +278,16 @@ def scarica_pagina(url, timeout=12):
     """
     Scarica l'HTML di una singola pagina.
     Restituisce il testo HTML come stringa, oppure None se fallisce.
+    In caso di errore SSL riprova con verify=False (alcuni siti hanno catene di certificati non standard).
     """
-    try:
+    def _fetch(verify_ssl):
         r = requests.get(
             url,
             headers=INTESTAZIONI_BROWSER,
             timeout=timeout,
-            allow_redirects=True,   # segue i redirect automaticamente (http → https, ecc.)
+            allow_redirects=True,
+            verify=verify_ssl,
         )
-        # Accettiamo 403 solo se la risposta sembra HTML reale del sito (non una pagina di errore)
         if r.status_code == 403:
             txt = r.text
             if len(txt) > 5000 and "403" not in txt[:200] and "forbidden" not in txt[:300].lower():
@@ -294,8 +295,19 @@ def scarica_pagina(url, timeout=12):
             return None
         r.raise_for_status()
         return r.text
+
+    try:
+        return _fetch(True)
+    except requests.exceptions.SSLError:
+        try:
+            import warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                return _fetch(False)
+        except Exception:
+            return None
     except Exception:
-        return None  # qualunque errore → restituiamo None senza bloccare il programma
+        return None
 
 
 def trova_link_checkout(html, url_base):
