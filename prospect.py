@@ -1828,20 +1828,20 @@ def stima_volumi_ecommerce(url_input, analisi, ragione_sociale=None):
 
 
 # ==============================================================
-# BLOCCO 6c – SUGGERIMENTI PITCH COMMERCIALE NEXI
+# BLOCCO 6c – SUGGERIMENTI PITCH COMMERCIALE
 # ==============================================================
 
 def genera_suggerimenti_pitch(analisi, stima, html_home=""):
     """
-    Motore di regole che incrocia i segnali del merchant con il portfolio
-    prodotti Nexi e genera suggerimenti di pitch personalizzati.
+    Motore di regole che genera suggerimenti di pitch neutri
+    basati sui segnali del merchant.
 
     Ogni suggerimento ha:
       - priorita: "alta" | "media" | "info"
       - icona:    emoji
       - titolo:   breve titolo del punto
       - corpo:    spiegazione + angolo commerciale (2-4 righe)
-      - prodotto: nome prodotto/soluzione Nexi da proporre
+      - prodotto: categoria/tag del suggerimento
     """
     if not analisi:
         return []
@@ -1855,7 +1855,6 @@ def genera_suggerimenti_pitch(analisi, stima, html_home=""):
     gmv_max       = (stima or {}).get("gmv_max") or 0
     gmv_min       = (stima or {}).get("gmv_min") or 0
 
-    ha_nexi      = "Nexi" in psp_rilevati
     ha_paypal    = "PayPal" in psp_rilevati
     ha_stripe    = "Stripe" in psp_rilevati
     ha_axerve    = "Axerve / Sella" in psp_rilevati
@@ -1865,7 +1864,8 @@ def genera_suggerimenti_pitch(analisi, stima, html_home=""):
     ha_scalapay  = "Scalapay" in psp_rilevati
     ha_satispay  = "Satispay" in psp_rilevati
     ha_bnpl      = ha_klarna or ha_scalapay
-    ha_gateway   = ha_nexi or ha_stripe or ha_axerve or ha_adyen or ha_worldline
+    ha_gateway   = ha_stripe or ha_axerve or ha_adyen or ha_worldline or any(
+        p for p in psp_rilevati if p not in {"PayPal","Klarna","Scalapay","Satispay"})
 
     usa_shopify     = any("Shopify"    in p for p in piattaforma)
     usa_woo         = any("WooCommerce" in p for p in piattaforma)
@@ -1893,216 +1893,148 @@ def genera_suggerimenti_pitch(analisi, stima, html_home=""):
 
     suggerimenti = []
 
-    def add(priorita, icona, titolo, corpo, prodotto):
+    def add(priorita, icona, titolo, corpo, tag):
         suggerimenti.append({
             "priorita": priorita,
             "icona":    icona,
             "titolo":   titolo,
             "corpo":    corpo,
-            "prodotto": prodotto,
+            "prodotto": tag,
         })
 
-    # ── REGOLE PER SETTORE ──────────────────────────────────────
+    # ── SETTORI VERTICALI ───────────────────────────────────────
 
     if is_hotel:
-        add("alta", "🏨", "Settore hospitality — soluzione verticale",
-            "Gli hotel hanno esigenze specifiche: pre-autorizzazione carta al check-in, "
-            "gestione no-show, pagamenti multi-valuta per ospiti internazionali. "
-            "XPay Hotel di Nexi è la soluzione verticale dedicata con PMS integration.",
-            "XPay Hotel")
+        add("alta", "🏨", "Settore hospitality — esigenze specifiche di pagamento",
+            "Gli hotel richiedono: pre-autorizzazione carta al check-in, gestione no-show, "
+            "pagamenti multi-valuta per ospiti internazionali e integrazione con PMS. "
+            "Verifica se il gateway attuale copre questi scenari e se c'è spazio per un verticale dedicato.",
+            "Hospitality")
         add("alta", "💱", "Alta incidenza carte estere → DCC opportunità",
-            "Gli hotel ricevono una quota elevata di pagamenti da carte estere (Visa/MC internazionali). "
-            "Il servizio DCC (Dynamic Currency Conversion) di Global Blue — in partnership con Nexi — "
-            "permette al cliente di pagare nella propria valuta generando revenue aggiuntivo per l'hotel (1-3% sul transato estero).",
-            "DCC – Global Blue × Nexi")
+            "Gli hotel ricevono una quota elevata di pagamenti da carte internazionali. "
+            "Il DCC (Dynamic Currency Conversion) permette al cliente di pagare nella propria valuta, "
+            "migliorando la UX e generando revenue aggiuntivo per la struttura (1-3% sul transato estero).",
+            "DCC")
 
     if is_parco and not is_hotel:
-        add("alta", "🎢", "Settore parchi & ticketing — vendita biglietti online",
-            "I parchi divertimenti vendono biglietti/abbonamenti online con picchi stagionali elevati. "
-            "XPay gestisce volumi transazionali alti con SLA garantiti, "
-            "supporta pagamenti rateali (HeyLight/PagoLight) per abbonamenti annuali ad alto valore "
-            "e offre Pay by Link per prenotazioni di gruppo e B2B (scuole, aziende).",
-            "XPay + Pay by Link")
-        add("alta", "💱", "Clientela internazionale → DCC opportunità",
-            "I parchi attraggono turisti stranieri con carte estere (Visa/MC internazionali). "
-            "Il servizio DCC (Dynamic Currency Conversion) di Global Blue × Nexi "
-            "permette al visitatore di pagare nella propria valuta, "
-            "migliorando la UX e generando revenue aggiuntivo per il parco (1-3% sul transato estero).",
-            "DCC – Global Blue × Nexi")
+        add("alta", "🎢", "Settore ticketing — gestione picchi stagionali",
+            "I parchi vendono biglietti e abbonamenti con picchi stagionali elevati. "
+            "Servono: volumi alti con SLA garantiti, pagamenti rateali per abbonamenti annuali "
+            "e Pay by Link per prenotazioni di gruppo (scuole, aziende).",
+            "Ticketing")
         add("media", "📅", "Abbonamenti stagionali → pagamenti ricorrenti",
-            "I parchi spesso offrono abbonamenti annuali o stagionali. "
-            "XPay con tokenizzazione e recurring payments consente il rinnovo automatico "
-            "senza re-inserimento dati, riducendo il churn e aumentando il LTV.",
-            "XPay + Recurring Payments")
+            "Gli abbonamenti annuali o stagionali beneficiano di tokenizzazione e recurring payments "
+            "per il rinnovo automatico, riducendo il churn e aumentando il LTV.",
+            "Recurring Payments")
 
-    if is_ciclismo:
-        add("alta", "🚴", "Settore ciclismo — ticket alto, clientela appassionata",
-            f"Il ticket medio nel ciclismo (€{ticket:.0f} stimato) è tra i più alti nell'ecommerce sport. "
-            "HeyLight/PagoLight di Nexi è la soluzione ideale per rateizzare l'acquisto di eBike e bici "
-            "da €500 a €10.000+, aumentando il tasso di conversione su ordini ad alto valore. "
-            "Pay by Link è utile per preventivi personalizzati (custom build, kit completi).",
-            "HeyLight + Pay by Link")
-        if not ha_bnpl:
-            add("alta", "🏷️", "Nessun BNPL rilevato — opportunità rateale",
-                "Il ciclismo ha ticket elevati ma la community è price-sensitive sulle rate. "
-                "Proporre Scalapay o HeyLight aumenta il conversion rate del 15-20% sugli ordini >€300.",
-                "HeyLight / Scalapay")
+    if is_ciclismo or (is_sport and ticket > 200):
+        add("alta", "🚴", "Ticket alto — soluzione Buy Now Pay Later",
+            f"Il ticket medio stimato (€{ticket:.0f}) è elevato. "
+            "L'assenza di BNPL (Klarna, Scalapay) aumenta l'abbandono del carrello del 15-20% "
+            "sugli ordini sopra €300. È uno dei principali driver di conversione per questa categoria.",
+            "BNPL")
 
-    if is_moto or is_auto:
-        add("media", "🔧", "Ricambi veicoli — acquisti ricorrenti e B2B",
-            f"I negozi di ricambi {'moto' if is_moto else 'auto'} hanno clienti professionali (officine, preparatori) "
-            "e privati con alta frequenza d'acquisto. "
-            "XPay supporta la tokenizzazione per i clienti abituali (1-click reorder) "
-            "e Pay by Link per preventivi a distanza verso officine e rivenditori B2B.",
-            "XPay + Pay by Link")
-
-    if is_sport and not is_ciclismo:
-        add("media", "🏅", "Settore sport — stagionalità e community",
-            "Gli ecommerce sport hanno picchi stagionali marcati (corsa primaverile, sci invernale). "
-            "XPay con BNPL integrato (HeyLight/Scalapay) riduce l'abbandono del carrello "
-            "su attrezzature ad alto valore. Satispay è molto usato dalla community under-35 sportiva.",
-            "XPay + BNPL")
-
-    if is_lusso or is_internaz:
+    if is_internaz:
         add("alta", "🌍", "Clientela internazionale → conversione valuta",
-            "Prodotti premium e clientela internazionale aumentano la quota di carte estere. "
-            "Il servizio DCC converte automaticamente il pagamento nella valuta del cliente, "
+            "Il sito ha segnali di vendita internazionale. "
+            "Il DCC (Dynamic Currency Conversion) converte il pagamento nella valuta del cliente, "
             "migliorando la UX e generando un margine aggiuntivo per il merchant.",
-            "DCC – Dynamic Currency Conversion")
+            "DCC")
 
-    cat_lower = categoria.lower()
     if any(k in cat_lower for k in ["pet","animali","farmac","cosmetica","alimentar","supplem"]):
         add("alta", "🔄", "Acquisti ricorrenti → pagamenti in abbonamento",
-            f"Il settore '{categoria}' ha un'alta frequenza d'acquisto su prodotti consumabili. "
-            "Proporre XPay con tokenizzazione della carta e pagamenti ricorrenti (autoship/abbonamento) "
-            "aumenta il LTV del cliente e riduce il churn. Punto di forza vs competitor: nessun costo aggiuntivo per recurring su XPay.",
-            "XPay + Recurring Payments")
+            f"Il settore '{categoria}' ha alta frequenza d'acquisto su prodotti consumabili. "
+            "Tokenizzazione della carta e recurring payments (autoship) aumentano il LTV "
+            "e riducono il churn.",
+            "Recurring Payments")
 
-    if is_marketplace:
-        add("alta", "🛒", "Modello marketplace → soluzione multi-vendor",
-            "Il sito ha caratteristiche di marketplace (più venditori, commissioni). "
-            "Nexi XPay Hero è la soluzione dedicata che gestisce split payment, "
-            "onboarding venditori e rendicontazione separata per ogni seller.",
-            "XPay Hero – Marketplace")
+    # ── PSP COMPETITOR ──────────────────────────────────────────
 
-    # ── REGOLE SU PSP COMPETITOR ────────────────────────────────
-
-    if ha_stripe and not ha_nexi:
-        add("alta", "⚡", "Stripe presente — angolo compliance e supporto locale",
-            "Stripe è un gateway americano: supporto clienti solo in inglese, "
+    if ha_stripe:
+        add("alta", "⚡", "Stripe presente — verifica supporto locale",
+            "Stripe è un gateway americano: supporto solo in inglese, "
             "gestione dispute non ottimizzata per il mercato italiano, "
             "rendicontazione fiscale complessa. "
-            "XPay offre supporto italiano dedicato, integrazione con sistemi di fatturazione italiani "
-            "e tempi di settlement più rapidi (D+1 vs D+2 di Stripe).",
-            "XPay – gateway italiano")
+            "Un gateway italiano offre settlement D+1 e supporto dedicato in lingua.",
+            "Gateway Locale")
 
-    if ha_paypal and not ha_nexi:
-        add("alta", "💡", "PayPal presente — fee elevate, opportunità sostituzione",
-            "PayPal applica commissioni del 3.4%+€0.35 per transazione (carte). "
-            "XPay permette di accettare le stesse carte (Visa/MC/Amex) a tariffe più competitive "
-            "e senza dipendere dall'ecosistema PayPal. "
-            "Proponi XPay come gateway primario per carte, mantenendo PayPal come metodo alternativo.",
-            "XPay Gateway")
+    if ha_paypal and not ha_gateway:
+        add("alta", "💡", "Solo PayPal per le carte — fee elevate",
+            "PayPal come unico gateway per carte applica commissioni del 3.4%+€0.35 per transazione. "
+            "Un gateway dedicato permette di accettare le stesse carte (Visa/MC/Amex) a tariffe più competitive, "
+            "mantenendo PayPal come metodo alternativo per chi lo preferisce.",
+            "Gateway Carte")
 
-    if ha_paypal and not ha_satispay:
-        add("media", "📱", "Satispay assente — opportunità su utenti mobile italiani",
-            "Satispay cresce rapidamente tra i consumatori italiani under 35. "
-            "La sua assenza può causare abbandono del carrello su mobile. "
-            "Nexi distribuisce Satispay in bundle, semplificando l'onboarding.",
-            "Satispay (via Nexi)")
-
-    if (ha_axerve or ha_worldline) and not ha_nexi:
-        add("alta", "🔄", "Gateway competitor — confronto diretto",
+    if ha_axerve or ha_worldline:
+        add("media", "🔄", "Gateway attivo — confronto tariffario",
             f"Il merchant usa {'Axerve/Sella' if ha_axerve else 'Worldline'} come gateway. "
-            "Proponi un benchmark tariffario su base GMV mensile: "
-            "Nexi offre tipicamente condizioni migliori su volumi > €10K/mese "
-            "con dashboard unificata e supporto commerciale dedicato.",
-            "XPay – analisi comparativa")
+            "Un benchmark tariffario su base GMV mensile è il miglior angolo di ingresso: "
+            "ogni 0.1% di risparmio sulle commissioni vale migliaia di euro/anno.",
+            "Confronto Tariffario")
 
-    if ha_adyen and not ha_nexi:
+    if ha_adyen:
         add("media", "🏢", "Adyen presente — merchant strutturato",
             "Adyen è usato da merchant enterprise con volumi elevati. "
-            "Suggerisci un'analisi dei costi reali (Adyen applica tariffe interchange++ complesse). "
-            "Nexi può essere più competitivo su volumi mid-market con pricing trasparente.",
-            "XPay Enterprise")
+            "Verifica i costi reali (Adyen applica tariffe interchange++ complesse). "
+            "Su volumi mid-market un gateway con pricing trasparente può essere più competitivo.",
+            "Confronto Enterprise")
 
-    # ── REGOLE SU BNPL ──────────────────────────────────────────
+    # ── BNPL ────────────────────────────────────────────────────
 
     if not ha_bnpl and ticket > 80:
         add("media", "💳", "BNPL assente — potenziale abbandono carrello",
-            f"Con un ticket medio di circa €{ticket:.0f}, l'assenza di soluzioni Buy Now Pay Later "
-            "(Klarna, Scalapay) può aumentare l'abbandono del carrello del 15-20% "
-            "su fasce d'età 25-45 anni. "
-            "Nexi può facilitare l'integrazione di BNPL nel checkout esistente.",
-            "BNPL Integration (Klarna/Scalapay × Nexi)")
+            f"Con un ticket medio di circa €{ticket:.0f}, l'assenza di Buy Now Pay Later "
+            "(Klarna, Scalapay) può causare abbandono del carrello nella fascia 25-45 anni. "
+            "È uno dei check-out add-on con ROI più alto su ticket >€80.",
+            "BNPL")
 
-    # ── REGOLE SU VOLUME ────────────────────────────────────────
+    # ── VOLUME ──────────────────────────────────────────────────
 
     if gmv_max and gmv_max >= 50_000:
-        add("alta", "📈", "Volume elevato → tariffe enterprise + account dedicato",
-            f"Il GMV mensile stimato ({_fmt_gmv(gmv_min)}–{_fmt_gmv(gmv_max)}) "
-            "supera la soglia per condizioni enterprise. "
+        add("alta", "📈", "Volume elevato → tariffe personalizzate",
+            f"Il transato mensile stimato ({_fmt_gmv(gmv_min)}–{_fmt_gmv(gmv_max)}) "
+            "supera la soglia per condizioni personalizzate. "
             "A questi volumi ogni 0.1% di risparmio sulle commissioni vale migliaia di euro/anno. "
-            "Proponi un'analisi dei costi attuali e un'offerta personalizzata con account manager dedicato.",
-            "XPay – offerta enterprise")
+            "Proponi un'analisi dei costi attuali e un'offerta su misura.",
+            "Enterprise")
 
     if gmv_max and gmv_max >= 10_000 and ticket and ticket >= 150:
         add("media", "🛡️", "Ticket alto → gestione frodi avanzata",
             f"Un ticket medio di €{ticket:.0f} con volumi significativi aumenta l'esposizione "
             "alle frodi (card testing, chargebacks). "
-            "XPay include 3DS2 avanzato e regole di fraud management configurabili "
-            "che riducono il churn rate legittimo mantenendo alta la protezione.",
-            "XPay Fraud Management + 3DS2")
+            "3DS2 avanzato e fraud management configurabile sono fondamentali a questo livello.",
+            "Fraud Management")
 
-    # ── REGOLE SU PIATTAFORMA ───────────────────────────────────
+    # ── PIATTAFORMA ─────────────────────────────────────────────
 
-    if usa_woo and not ha_nexi:
-        add("media", "🔌", "WooCommerce — plugin Nexi disponibile",
-            "Il sito usa WooCommerce. Nexi offre un plugin ufficiale gratuito "
-            "che si installa in pochi minuti senza sviluppo custom. "
+    if usa_woo:
+        add("media", "🔌", "WooCommerce — plugin gateway disponibile",
+            "Il sito usa WooCommerce. La maggior parte dei gateway offre plugin ufficiali "
+            "che si installano in pochi minuti senza sviluppo custom. "
             "Punto chiave: attivazione rapida, nessun costo di integrazione.",
-            "Plugin Nexi per WooCommerce")
+            "Plugin WooCommerce")
 
-    if usa_prestashop and not ha_nexi:
-        add("media", "🔌", "PrestaShop — modulo Nexi certificato",
-            "Il sito usa PrestaShop. Il modulo Nexi certificato per PrestaShop "
-            "è disponibile sul marketplace ufficiale e supporta 3DS2, "
-            "pagamenti ricorrenti e split payment.",
-            "Modulo Nexi per PrestaShop")
-
-    if usa_shopify and not ha_nexi:
-        add("media", "🔌", "Shopify — integrazione via XPay",
-            "Shopify limita i gateway di terze parti con commissioni aggiuntive (0.5-2%). "
-            "XPay è integrabile via Shopify Payments API: "
-            "verifica se il merchant sta pagando queste commissioni extra.",
-            "XPay per Shopify")
+    if usa_shopify:
+        add("media", "🔌", "Shopify — commissioni gateway extra",
+            "Shopify addebita commissioni aggiuntive (0.5-2%) sui gateway di terze parti. "
+            "Verifica se il merchant le sta pagando e quantifica il risparmio potenziale.",
+            "Shopify Gateway")
 
     if not usa_piattaforma_nota:
         add("info", "⚙️", "Piattaforma custom — integrazione API",
-            "Il sito non usa una piattaforma standard: è probabile un'integrazione custom. "
-            "Sottolinea che XPay offre API REST documentate, SDK per i principali linguaggi "
-            "e un ambiente sandbox gratuito per i test. "
-            "Il team tecnico Nexi supporta l'integrazione.",
-            "XPay API + supporto tecnico")
-
-    # ── REGOLA BASE (sempre presente se Nexi non rilevato) ──────
-
-    if not ha_nexi and raggiungibile:
-        add("info", "🎯", "Nexi non presente — opportunità di ingresso",
-            "Nexi non è attualmente tra i metodi di pagamento rilevati nel sito. "
-            "È un'opportunità aperta: il merchant non è già cliente e non ci sono "
-            "costi di switch da gestire. Approccia con un'analisi dei costi attuali "
-            "e un'offerta basata sul volume stimato.",
-            "XPay – proposta iniziale")
+            "Il sito non usa una piattaforma standard: probabile integrazione custom. "
+            "Un gateway con API REST documentate, SDK multi-linguaggio e sandbox gratuita "
+            "semplifica l'integrazione tecnica.",
+            "API Integration")
 
     # ── B2B ─────────────────────────────────────────────────────
 
     if is_b2b:
-        add("media", "🏭", "Componente B2B — Pay by Link e bonifici istantanei",
+        add("media", "🏭", "Componente B2B — Pay by Link",
             "Il sito ha segnali di vendita B2B (ingrosso, listino rivenditori). "
-            "Proponi Pay by Link per fatture B2B senza checkout online "
-            "e l'integrazione con bonifici istantanei SEPA per pagamenti da aziende.",
-            "Pay by Link + Bonifici Istantanei")
+            "Pay by Link per fatture B2B e integrazione con bonifici SEPA istantanei "
+            "coprono le esigenze di pagamento verso aziende senza checkout standard.",
+            "B2B Payments")
 
     # Ordina: alta → media → info
     ordine = {"alta": 0, "media": 1, "info": 2}
@@ -2432,6 +2364,292 @@ def main():
         print("  Suggerimento: cerca la PEC manualmente su")
         print("  https://www.inipec.gov.it/cerca-pec")
         print()
+
+
+def _calcola_mix_ai(gmv_min, gmv_max, psp_list, quota_carte, quota_paypal):
+    ha_paypal = "PayPal" in psp_list
+    mix = [{"metodo": "Carta (Visa/MC/Amex)", "quota": quota_carte,
+             "gmv_min": int(gmv_min * quota_carte / 100),
+             "gmv_max": int(gmv_max * quota_carte / 100)}]
+    if ha_paypal:
+        mix.append({"metodo": "PayPal", "quota": quota_paypal,
+                    "gmv_min": int(gmv_min * quota_paypal / 100),
+                    "gmv_max": int(gmv_max * quota_paypal / 100)})
+    altro = 100 - quota_carte - (quota_paypal if ha_paypal else 0)
+    if altro > 0:
+        mix.append({"metodo": "Altri metodi", "quota": altro,
+                    "gmv_min": int(gmv_min * altro / 100),
+                    "gmv_max": int(gmv_max * altro / 100)})
+    return mix
+
+
+def stima_volumi_ai(url_input, analisi, ragione_sociale=None):
+    """
+    Stima il transato (carte + PayPal) tramite AI (Groq Llama 3.3 70B).
+    Raccoglie i segnali con l'algoritmo rule-based, poi chiede all'AI di stimare.
+    Fallback automatico al rule-based se l'API non è disponibile.
+    """
+    import os, json as _json
+
+    base = stima_volumi_ecommerce(url_input, analisi, ragione_sociale)
+    if not base:
+        return None
+
+    api_key = os.environ.get("GROQ_API_KEY", "")
+    if not api_key:
+        _env = os.path.join(os.path.dirname(__file__), ".env")
+        if os.path.exists(_env):
+            for _line in open(_env):
+                if _line.startswith("GROQ_API_KEY="):
+                    api_key = _line.split("=", 1)[1].strip()
+    if not api_key:
+        return base
+
+    try:
+        from groq import Groq
+    except ImportError:
+        return base
+
+    def _fmte(v):
+        if not v: return "n.d."
+        if v >= 1e6: return f"€{v/1e6:.1f}M"
+        if v >= 1e3: return f"€{v/1e3:.0f}K"
+        return f"€{int(v)}"
+
+    visite   = base.get("visite_mensili")
+    ticket   = base.get("ticket_medio") or 0
+    n_sku    = base.get("n_sku")
+    tp_rec   = base.get("recensioni_trustpilot")
+    tp_sc    = base.get("score_trustpilot")
+    tp_anni  = base.get("anni_attivi_tp")
+    fat      = base.get("fatturato_totale")
+    cat      = base.get("categoria", "generico")
+    rb_min   = base.get("transato_annuo_min")
+    rb_max   = base.get("transato_annuo_max")
+    pf_list  = analisi.get("piattaforma", [])
+    psp_list = analisi.get("psp", [])
+
+    tp_info = ""
+    if tp_rec:
+        tp_info = f"{tp_rec} recensioni, voto {tp_sc:.1f}/5"
+        if tp_anni:
+            tp_info += f", attivo da {tp_anni:.0f} anni"
+
+    segnali = "\n".join([
+        f"Sito: {url_input}",
+        f"Ragione sociale: {ragione_sociale or 'n.d.'}",
+        f"Categoria: {cat}",
+        f"Visite mensili stimate: {f'{visite:,}' if visite else 'n.d.'}",
+        f"Ticket medio categoria: €{ticket:.0f}",
+        f"Piattaforma e-commerce: {', '.join(pf_list) if pf_list else 'non rilevata'}",
+        f"PSP attivi: {', '.join(psp_list) if psp_list else 'nessuno rilevato'}",
+        f"SKU catalogo (sitemap): {n_sku if n_sku else 'n.d.'}",
+        f"Trustpilot: {tp_info if tp_info else 'non trovato'}",
+        f"Fatturato aziendale: {_fmte(fat) if fat else 'non disponibile'}",
+        f"Stima rule-based (riferimento): {_fmte(rb_min)} – {_fmte(rb_max)}",
+    ])
+
+    prompt_sistema = (
+        "Sei un esperto di e-commerce italiano. Stima il transato online annuo "
+        "(pagamenti con carta di credito/debito + PayPal) per un merchant italiano. "
+        "Rispondi ESCLUSIVAMENTE con un oggetto JSON valido."
+    )
+
+    prompt_utente = f"""Stima il transato online annuo (carte + PayPal) per questo merchant.
+
+DATI MERCHANT:
+{segnali}
+
+BENCHMARK ITALIA E-COMMERCE 2024 (Osservatorio Politecnico di Milano):
+- Quota carte (Visa/MC/Amex): 65-72% del GMV online
+- Quota PayPal: 14-18% del GMV online
+- Altri (bonifico, contrassegno, BNPL, wallet): 14-21%
+- Conversion rate per categoria: moda 1.8-2.5%, elettronica 0.8-1.5%, sport 1.5-2.5%, farmacia 3-5%, food 1.5-3%, generico 1.2-2.2%
+- Ticket medio Trustpilot: ogni 1000 recensioni/anno ≈ €300K–€1M transato (dipende da settore)
+
+ISTRUZIONI:
+- Usa la stima rule-based come ancora ma ragiona su TUTTI i segnali
+- Se i segnali si contraddicono, dai più peso ai dati più affidabili (fatturato > Trustpilot > visite)
+- Sii conservativo: meglio sottostimare che sovrastimare
+- Range max/min non oltre il 40% di spread
+
+Restituisci SOLO questo JSON:
+{{
+  "gmv_annuo_min": <intero in euro>,
+  "gmv_annuo_max": <intero in euro>,
+  "carte_annuo_min": <intero in euro>,
+  "carte_annuo_max": <intero in euro>,
+  "paypal_annuo_min": <intero in euro>,
+  "paypal_annuo_max": <intero in euro>,
+  "quota_carte": <intero 0-100>,
+  "quota_paypal": <intero 0-100>,
+  "affidabilita": "<Alta|Media|Bassa>",
+  "ragionamento": "<3-4 frasi in italiano sul processo di stima>"
+}}"""
+
+    try:
+        client  = Groq(api_key=api_key)
+        risposta = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": prompt_sistema},
+                {"role": "user",   "content": prompt_utente},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+            max_tokens=600,
+        )
+        ai = _json.loads(risposta.choices[0].message.content.strip())
+
+        gmv_min = int(ai.get("gmv_annuo_min") or rb_min or 0)
+        gmv_max = int(ai.get("gmv_annuo_max") or rb_max or 0)
+        q_carte   = int(ai.get("quota_carte", 68))
+        q_paypal  = int(ai.get("quota_paypal", 16))
+
+        base.update({
+            "transato_annuo_min":  gmv_min,
+            "transato_annuo_max":  gmv_max,
+            "carte_annuo_min":     int(ai.get("carte_annuo_min") or gmv_min * q_carte / 100),
+            "carte_annuo_max":     int(ai.get("carte_annuo_max") or gmv_max * q_carte / 100),
+            "paypal_annuo_min":    int(ai.get("paypal_annuo_min") or gmv_min * q_paypal / 100),
+            "paypal_annuo_max":    int(ai.get("paypal_annuo_max") or gmv_max * q_paypal / 100),
+            "quota_carte":         q_carte,
+            "quota_paypal":        q_paypal,
+            "ragionamento_ai":     ai.get("ragionamento", ""),
+            "affidabilita":        ai.get("affidabilita", base.get("affidabilita", "Media")),
+            "metodo_stima":        "AI (Llama 3.3 70B) su segnali scraping",
+            "mix_pagamenti":       _calcola_mix_ai(gmv_min, gmv_max, psp_list, q_carte, q_paypal),
+            "gmv_min":             gmv_min,
+            "gmv_max":             gmv_max,
+        })
+        return base
+
+    except Exception:
+        return base
+
+
+def analisi_ai_merchant(ragione_sociale, url, analisi, stima, notizie):
+    """
+    Genera un'analisi pre-call del merchant tramite Groq (Llama 3.3 70B).
+    Ritorna un dict con profilo, contesto volumi, punteggio opportunità, talking points, obiezioni.
+    """
+    import os, json as _json
+
+    api_key = os.environ.get("GROQ_API_KEY", "")
+    if not api_key:
+        _env = os.path.join(os.path.dirname(__file__), ".env")
+        if os.path.exists(_env):
+            for _line in open(_env):
+                if _line.startswith("GROQ_API_KEY="):
+                    api_key = _line.split("=", 1)[1].strip()
+    if not api_key:
+        return None
+
+    try:
+        from groq import Groq
+    except ImportError:
+        return None
+
+    psp_list   = (analisi or {}).get("psp", [])
+    pf_list    = (analisi or {}).get("piattaforma", [])
+    be_list    = (analisi or {}).get("booking_engine", [])
+    email_list = (analisi or {}).get("email", [])
+    tel_list   = (analisi or {}).get("telefoni", [])
+
+    t_min = (stima or {}).get("transato_annuo_min")
+    t_max = (stima or {}).get("transato_annuo_max")
+    if t_min and t_max and t_max >= 1_000_000:
+        transato_str = f"€{t_min/1e6:.1f}M – €{t_max/1e6:.1f}M/anno"
+    elif t_min and t_max:
+        transato_str = f"€{t_min/1e3:.0f}K – €{t_max/1e3:.0f}K/anno"
+    else:
+        transato_str = "non stimato"
+
+    affid    = (stima or {}).get("affidabilita", "")
+    metodo   = (stima or {}).get("metodo_stima", "")
+    categoria = (stima or {}).get("categoria", "")
+    fat_tot  = (stima or {}).get("fatturato_totale")
+    if fat_tot and fat_tot >= 1_000_000:
+        fat_str = f"€{fat_tot/1e6:.1f}M"
+    elif fat_tot:
+        fat_str = f"€{fat_tot/1e3:.0f}K"
+    else:
+        fat_str = "non disponibile"
+
+    n_sku   = (stima or {}).get("n_sku")
+    visite  = (stima or {}).get("visite_mensili")
+    ticket  = (stima or {}).get("ticket_medio")
+
+    news_titoli = [n.get("titolo", "") for n in (notizie or [])[:5]]
+
+    contesto = "\n".join([
+        f"MERCHANT: {ragione_sociale or 'Sconosciuto'}",
+        f"SITO: {url or '—'}",
+        f"SETTORE/CATEGORIA: {categoria or '—'}",
+        f"FATTURATO AZIENDALE TOTALE: {fat_str}",
+        f"TRANSATO ECOMMERCE STIMATO: {transato_str} (affidabilità: {affid}, metodo: {metodo})",
+        f"VISITE MENSILI: {f'{visite:,}' if visite else 'n.d.'}",
+        f"TICKET MEDIO: {'€'+str(int(ticket)) if ticket else 'n.d.'}",
+        f"SKU CATALOGO: {n_sku if n_sku else 'n.d.'}",
+        f"PIATTAFORMA ECOMMERCE: {', '.join(pf_list) if pf_list else 'Non rilevata'}",
+        f"PSP ATTIVI: {', '.join(psp_list) if psp_list else 'Nessuno rilevato'}",
+        f"BOOKING ENGINE: {', '.join(be_list) if be_list else '—'}",
+        f"EMAIL: {', '.join(email_list) if email_list else '—'}",
+        f"TELEFONO: {', '.join(tel_list) if tel_list else '—'}",
+        f"ULTIME NOTIZIE: {' | '.join(news_titoli) if news_titoli else 'Nessuna'}",
+    ])
+
+    prompt_sistema = (
+        "Sei un analista commerciale senior specializzato in pagamenti digitali che lavora per Nexi, "
+        "il principale Payment Service Provider italiano. "
+        "Il tuo compito è preparare una scheda pre-call per un sales manager di Nexi che sta per contattare un merchant ecommerce. "
+        "Rispondi ESCLUSIVAMENTE con un oggetto JSON valido, senza testo aggiuntivo prima o dopo."
+    )
+
+    prompt_utente = f"""Analizza questo merchant e produci la scheda pre-call in JSON con questa struttura esatta:
+
+{{
+  "profilo": "Descrizione del merchant in 2-3 righe: chi è, cosa vende, posizionamento di mercato.",
+  "contesto_volumi": "Spiegazione ragionata della stima del transato: cosa la supporta, quali dati la influenzano, margine di incertezza e perché.",
+  "punteggio_opportunita": 4,
+  "motivazione_punteggio": "Perché questo punteggio da 1 a 5: tiene conto di volumi, PSP attuali, settore, potenziale di crescita.",
+  "talking_points": [
+    "Punto chiave 1 per la call",
+    "Punto chiave 2 per la call",
+    "Punto chiave 3 per la call"
+  ],
+  "obiezioni_probabili": [
+    "Obiezione 1 che potrebbe sollevare il merchant e come gestirla"
+  ]
+}}
+
+DATI MERCHANT:
+{contesto}
+
+Regole:
+- punteggio_opportunita è un intero da 1 (bassa) a 5 (molto alta)
+- se il merchant usa già Nexi, segnalalo nel profilo e valuta l'upsell
+- se nessun PSP è rilevato, è una grande opportunità di acquisizione
+- talking_points devono essere concreti e specifici per QUESTO merchant, non generici
+- rispondi in italiano
+"""
+
+    try:
+        client   = Groq(api_key=api_key)
+        risposta = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": prompt_sistema},
+                {"role": "user",   "content": prompt_utente},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.4,
+            max_tokens=1200,
+        )
+        testo = risposta.choices[0].message.content.strip()
+        return _json.loads(testo)
+    except Exception:
+        return None
 
 
 # Questo blocco fa partire il programma solo quando

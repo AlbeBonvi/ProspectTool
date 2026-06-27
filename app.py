@@ -10,9 +10,20 @@ import pandas as pd
 import streamlit as st
 import requests as req_lib
 
+import os
+
 from prospect import (valida_piva, verifica_piva, cerca_pec,
                       analizza_sito, cerca_news, cerca_portfolio_agenzia,
-                      stima_volumi_ecommerce, genera_suggerimenti_pitch)
+                      stima_volumi_ai, genera_suggerimenti_pitch,
+                      analisi_ai_merchant)
+
+# Rende la chiave Groq disponibile a prospect.py tramite env var
+try:
+    _groq_key = st.secrets.get("GROQ_API_KEY", "")
+    if _groq_key:
+        os.environ["GROQ_API_KEY"] = _groq_key
+except Exception:
+    pass
 
 
 # ──────────────────────────────────────────────────────────────
@@ -20,8 +31,8 @@ from prospect import (valida_piva, verifica_piva, cerca_pec,
 # ──────────────────────────────────────────────────────────────
 
 st.set_page_config(
-    page_title="Nexi — Merchant Intelligence",
-    page_icon="🔵",
+    page_title="Merchant Intelligence",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -29,9 +40,9 @@ st.set_page_config(
 
 # ──────────────────────────────────────────────────────────────
 # PALETTE NEXI (da www.nexi.it/clientlib-site.min.css)
-# --blue:          #2d32aa   ← blu primario brand
-# --darkBlue:      #191e80   ← blu scuro / hover
-# --azure:         #00b8de   ← azzurro accento
+# --blue:          #1d4ed8   ← blu primario brand
+# --darkBlue:      #1e3a8a   ← blu scuro / hover
+# --azure:         #0891b2   ← azzurro accento
 # --green:         #48d597   ← verde successo
 # --red:           #f9423a   ← rosso solo per errori
 # --nexiBlack:     #1F1F20
@@ -49,7 +60,7 @@ st.markdown("""
   html, body,
   [data-testid="stApp"],
   [data-testid="stAppViewContainer"] {
-    background: linear-gradient(160deg, #191e80 0%, #2d32aa 70%, #363986 100%) !important;
+    background: linear-gradient(160deg, #0f172a 0%, #1e3a8a 70%, #0f172a 100%) !important;
     min-height: 100vh;
   }
 
@@ -104,7 +115,7 @@ st.markdown("""
     border: 1px solid rgba(255,255,255,0.3) !important;
   }
   [data-testid="stTextInput"] input:focus {
-    border-color: #00b8de !important;
+    border-color: #0891b2 !important;
     box-shadow: 0 0 0 2px rgba(0,184,222,0.35) !important;
   }
 
@@ -124,14 +135,14 @@ st.markdown("""
     display: inline-block;
   }
   .nexi-logo-dot {
-    color: #00b8de;
+    color: #0891b2;
     font-size: 3.8rem;
     line-height: 1;
   }
   .nexi-accent-line {
     width: 52px;
     height: 4px;
-    background: #00b8de;
+    background: #0891b2;
     border-radius: 2px;
     margin: 0.65rem 0 0.6rem 0;
   }
@@ -215,7 +226,7 @@ st.markdown("""
   /* ── Badge PSP — blu Nexi ── */
   .badge-psp {
     background: rgba(45,50,170,0.08);
-    color: #2d32aa;
+    color: #1d4ed8;
     border: 1px solid rgba(45,50,170,0.20);
     padding: 4px 13px;
     border-radius: 4px;
@@ -229,9 +240,9 @@ st.markdown("""
 
   /* Badge PSP speciale quando è Nexi stesso — pieno blu */
   .badge-psp-nexi {
-    background: #2d32aa;
+    background: #1d4ed8;
     color: #FFFFFF;
-    border: 1px solid #2d32aa;
+    border: 1px solid #1d4ed8;
     padding: 4px 13px;
     border-radius: 4px;
     font-size: 0.80rem;
@@ -272,7 +283,7 @@ st.markdown("""
   [data-testid="stVerticalBlockBorderWrapper"] {
     background: #FFFFFF !important;
     border: none !important;
-    border-top: 3px solid #2d32aa !important;
+    border-top: 3px solid #1d4ed8 !important;
     border-radius: 10px !important;
     box-shadow: 0 4px 24px rgba(0,0,0,0.22) !important;
   }
@@ -285,7 +296,7 @@ st.markdown("""
   /* Eccezioni: badge e classi con colore proprio */
   [data-testid="stVerticalBlockBorderWrapper"] .stato-attiva   { color: #1a7a52 !important; }
   [data-testid="stVerticalBlockBorderWrapper"] .stato-cessata  { color: #c0281f !important; }
-  [data-testid="stVerticalBlockBorderWrapper"] .badge-psp      { color: #2d32aa !important; }
+  [data-testid="stVerticalBlockBorderWrapper"] .badge-psp      { color: #1d4ed8 !important; }
   [data-testid="stVerticalBlockBorderWrapper"] .badge-psp-nexi { color: #FFFFFF !important; }
   [data-testid="stVerticalBlockBorderWrapper"] .badge-platform { color: #007a9a !important; }
   [data-testid="stVerticalBlockBorderWrapper"] .badge-none     { color: #9a9b9c !important; }
@@ -293,13 +304,13 @@ st.markdown("""
   [data-testid="stVerticalBlockBorderWrapper"] .field-empty    { color: #b2b4b3 !important; }
   [data-testid="stVerticalBlockBorderWrapper"] .disclaimer     { color: #9a9b9c !important; }
   [data-testid="stVerticalBlockBorderWrapper"] .news-meta      { color: #9a9b9c !important; }
-  [data-testid="stVerticalBlockBorderWrapper"] .news-categoria { color: #2d32aa !important; }
-  [data-testid="stVerticalBlockBorderWrapper"] .news-fonte     { color: #2d32aa !important; }
+  [data-testid="stVerticalBlockBorderWrapper"] .news-categoria { color: #1d4ed8 !important; }
+  [data-testid="stVerticalBlockBorderWrapper"] .news-fonte     { color: #1d4ed8 !important; }
   [data-testid="stVerticalBlockBorderWrapper"] .news-title a   { color: #1F1F20 !important; }
 
   /* ── Bottone primario ── */
   div[data-testid="stButton"] > button[kind="primary"] {
-    background-color: #2d32aa !important;
+    background-color: #1d4ed8 !important;
     border: none !important;
     border-radius: 4px !important;
     font-weight: 700 !important;
@@ -307,12 +318,12 @@ st.markdown("""
     font-family: "Helvetica Neue", Arial, sans-serif !important;
   }
   div[data-testid="stButton"] > button[kind="primary"]:hover {
-    background-color: #191e80 !important;
+    background-color: #1e3a8a !important;
   }
 
   /* ── Download button — blu scuro ── */
   div[data-testid="stDownloadButton"] > button {
-    background-color: #191e80 !important;
+    background-color: #1e3a8a !important;
     color: white !important;
     border: none !important;
     border-radius: 4px !important;
@@ -320,7 +331,7 @@ st.markdown("""
     font-family: "Helvetica Neue", Arial, sans-serif !important;
   }
   div[data-testid="stDownloadButton"] > button:hover {
-    background-color: #2d32aa !important;
+    background-color: #1d4ed8 !important;
   }
 
   /* ── Input fields ── */
@@ -330,8 +341,8 @@ st.markdown("""
     font-family: "Helvetica Neue", Arial, sans-serif;
   }
   [data-testid="stTextInput"] input:focus {
-    border-color: #2d32aa !important;
-    box-shadow: 0 0 0 1px #2d32aa !important;
+    border-color: #1d4ed8 !important;
+    box-shadow: 0 0 0 1px #1d4ed8 !important;
   }
 
   /* ── Divider ── */
@@ -349,13 +360,13 @@ st.markdown("""
   .news-card {
     background: #FFFFFF;
     border: 1px solid #e0e1dd;
-    border-left: 4px solid #2d32aa;
+    border-left: 4px solid #1d4ed8;
     border-radius: 6px;
     padding: 0.85rem 1rem;
     margin-bottom: 0.65rem;
     transition: border-left-color 0.15s;
   }
-  .news-card:hover { border-left-color: #00b8de; }
+  .news-card:hover { border-left-color: #0891b2; }
   .news-title {
     font-size: 0.88rem;
     font-weight: 600;
@@ -368,7 +379,7 @@ st.markdown("""
     color: #1F1F20;
     text-decoration: none;
   }
-  .news-title a:hover { color: #2d32aa; }
+  .news-title a:hover { color: #1d4ed8; }
   .news-meta {
     font-size: 0.70rem;
     color: #9a9b9c;
@@ -378,7 +389,7 @@ st.markdown("""
   .news-fonte {
     display: inline-block;
     background: rgba(45,50,170,0.08);
-    color: #2d32aa;
+    color: #1d4ed8;
     border-radius: 3px;
     padding: 1px 7px;
     font-size: 0.68rem;
@@ -390,7 +401,7 @@ st.markdown("""
     display: inline-block;
     font-size: 0.68rem;
     font-weight: 700;
-    color: #2d32aa;
+    color: #1d4ed8;
     background: rgba(45,50,170,0.07);
     padding: 1px 8px;
     border-radius: 3px;
@@ -409,7 +420,7 @@ st.markdown("""
      FOOTER navy pieno larghezza
      ══════════════════════════════════════════════ */
   .nexi-footer {
-    background: #15195F;
+    background: #0f172a;
     margin: 2.5rem -6rem -3rem -6rem;
     padding: 1.6rem 6rem;
     font-size: 0.70rem;
@@ -418,7 +429,7 @@ st.markdown("""
     font-family: "Helvetica Neue", Arial, sans-serif;
     letter-spacing: 0.05em;
   }
-  .nexi-footer a { color: #00b8de; text-decoration: none; }
+  .nexi-footer a { color: #0891b2; text-decoration: none; }
 
 </style>
 """, unsafe_allow_html=True)
@@ -500,14 +511,13 @@ def build_csv(piva, ragione, stato, pec, analisi):
 
 st.markdown("""
 <div class="nexi-logo-wrap">
-  <div class="nexi-logo">nexi<span class="nexi-logo-dot">.</span></div>
+  <div class="nexi-logo">merchant<span class="nexi-logo-dot">.</span>intelligence</div>
   <div class="nexi-accent-line"></div>
-  <div class="nexi-product-name">Merchant Intelligence</div>
+  <div class="nexi-product-name">PSP Sales Tool</div>
   <div class="nexi-tagline">
     Verifica Partita IVA, recupera PEC e analizza la presenza online<br>
-    dei tuoi prospect ecommerce — tutto in un click.
+    dei tuoi prospect ecommerce — stima AI del transato carte + PayPal.
   </div>
-  <div class="nexi-badge-interno">STRUMENTO INTERNO · USO RISERVATO</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -605,10 +615,10 @@ if avvia:
     stima = None
     html_home_cache = None
     if url_pulito and analisi and analisi.get("raggiungibile"):
-        with st.spinner("Stimo i volumi di transato…"):
+        with st.spinner("Stimo i volumi di transato (AI)…"):
             try:
-                stima = stima_volumi_ecommerce(url_pulito, analisi,
-                                              ragione_sociale=ragione_sociale)
+                stima = stima_volumi_ai(url_pulito, analisi,
+                                        ragione_sociale=ragione_sociale)
             except Exception:
                 stima = None
 
@@ -619,6 +629,16 @@ if avvia:
             suggerimenti = genera_suggerimenti_pitch(analisi, stima)
         except Exception:
             suggerimenti = []
+
+    # ── Analisi AI pre-call ──
+    ai_analisi = None
+    if url_pulito and analisi and analisi.get("raggiungibile"):
+        with st.spinner("Elaboro la scheda AI pre-call…"):
+            try:
+                ai_analisi = analisi_ai_merchant(
+                    ragione_sociale, url_pulito, analisi, stima, notizie)
+            except Exception:
+                ai_analisi = None
 
     # ── Salva subito analisi — così i risultati appaiono anche se il portfolio fallisce ──
     st.session_state.analisi_dati = {
@@ -633,6 +653,7 @@ if avvia:
         "notizie":         notizie,
         "stima":           stima,
         "suggerimenti":    suggerimenti,
+        "ai_analisi":      ai_analisi,
     }
     st.session_state.portfolio_agenzia = None
 
@@ -663,9 +684,10 @@ if st.session_state.analisi_dati:
     stima           = d.get("stima")
     suggerimenti    = d.get("suggerimenti", [])
     indirizzo       = d.get("indirizzo", "")
+    ai_analisi      = d.get("ai_analisi")
 
     CARD = (
-        "background:#FFFFFF;border-radius:10px;border-top:3px solid #2d32aa;"
+        "background:#FFFFFF;border-radius:10px;border-top:3px solid #1d4ed8;"
         "box-shadow:0 4px 24px rgba(0,0,0,0.20);padding:1.4rem 1.6rem;"
         "font-family:'Helvetica Neue',Arial,sans-serif;"
     )
@@ -705,7 +727,7 @@ if st.session_state.analisi_dati:
         if ag and ag.get("nome"):
             ag_nome = ag["nome"]
             ag_url  = ag.get("url", "")
-            ag_link = (f'<a href="{ag_url}" target="_blank" style="color:#2d32aa;font-weight:600;text-decoration:none;">{ag_nome} ↗</a>'
+            ag_link = (f'<a href="{ag_url}" target="_blank" style="color:#1d4ed8;font-weight:600;text-decoration:none;">{ag_nome} ↗</a>'
                        if ag_url else
                        f'<span style="font-weight:600;color:#1F1F20;">{ag_nome}</span>')
             ag_html = lbl("Agenzia web") + f'<div style="{VAL}">{ag_link}</div>'
@@ -716,7 +738,7 @@ if st.session_state.analisi_dati:
         be_list = analisi.get("booking_engine", [])
         if be_list:
             be_badge = "".join(
-                f'<span style="background:rgba(45,50,170,0.08);color:#2d32aa;border:1px solid rgba(45,50,170,0.25);'
+                f'<span style="background:rgba(45,50,170,0.08);color:#1d4ed8;border:1px solid rgba(45,50,170,0.25);'
                 f'padding:4px 14px;border-radius:4px;font-size:0.82rem;font-weight:700;margin-right:6px;">{b}</span>'
                 for b in be_list
             )
@@ -737,9 +759,7 @@ if st.session_state.analisi_dati:
             psp_badges = '<span style="background:#e0e1dd;color:#9a9b9c;padding:4px 14px;border-radius:4px;font-size:0.80rem;">Nessuno rilevato</span>'
         else:
             psp_badges = "".join(
-                f'<span style="background:#2d32aa;color:#fff;padding:4px 13px;border-radius:4px;font-size:0.80rem;font-weight:700;margin:3px 4px 3px 0;display:inline-block;">★ {p}</span>'
-                if "Nexi" in p else
-                f'<span style="background:rgba(45,50,170,0.08);color:#2d32aa;border:1px solid rgba(45,50,170,0.20);padding:4px 13px;border-radius:4px;font-size:0.80rem;font-weight:600;margin:3px 4px 3px 0;display:inline-block;">{p}</span>'
+                f'<span style="background:rgba(29,78,216,0.08);color:#1d4ed8;border:1px solid rgba(29,78,216,0.20);padding:4px 13px;border-radius:4px;font-size:0.80rem;font-weight:600;margin:3px 4px 3px 0;display:inline-block;">{p}</span>'
                 for p in psp_list
             )
         pag_body = (lbl("PSP / Metodi di pagamento") + psp_badges +
@@ -823,7 +843,7 @@ if st.session_state.analisi_dati:
                 f'  </div>'
                 f'  <div style="font-size:0.84rem;color:#1F1F20;line-height:1.55;margin-bottom:0.5rem;">'
                 f'  {s["corpo"]}</div>'
-                f'  <div style="display:inline-block;background:#2d32aa;color:#fff;'
+                f'  <div style="display:inline-block;background:#1d4ed8;color:#fff;'
                 f'  font-size:0.68rem;font-weight:700;padding:2px 10px;border-radius:4px;">'
                 f'  📦 {s["prodotto"]}</div>'
                 f'</div>'
@@ -836,9 +856,9 @@ if st.session_state.analisi_dati:
     def _news_card_html(n):
         cat = n.get("categoria", "📰 Notizie")
         rilevante = cat in CATEGORIE_NEXI
-        bordo = "#2d32aa" if rilevante else "#dde0f5"
+        bordo = "#1d4ed8" if rilevante else "#dde0f5"
         badge_html = (
-            '<span style="background:#2d32aa;color:#fff;font-size:0.60rem;font-weight:700;'
+            '<span style="background:#1d4ed8;color:#fff;font-size:0.60rem;font-weight:700;'
             'padding:1px 7px;border-radius:3px;margin-left:6px;vertical-align:middle;">'
             '⚡ RILEVANTE NEXI</span>'
         ) if rilevante else ""
@@ -846,7 +866,7 @@ if st.session_state.analisi_dati:
             f'<div style="background:#fff;border:1px solid #e8eaf6;border-left:4px solid {bordo};'
             f'border-radius:6px;padding:0.85rem 1rem;margin-bottom:0.65rem;">'
             f'  <div style="margin-bottom:0.3rem;">'
-            f'    <span style="background:rgba(45,50,170,0.07);color:#2d32aa;font-size:0.68rem;'
+            f'    <span style="background:rgba(45,50,170,0.07);color:#1d4ed8;font-size:0.68rem;'
             f'    font-weight:700;padding:1px 8px;border-radius:3px;">{cat}</span>{badge_html}'
             f'  </div>'
             f'  <div style="font-size:0.88rem;font-weight:600;color:#1F1F20;line-height:1.35;">'
@@ -854,7 +874,7 @@ if st.session_state.analisi_dati:
             f'    {n["titolo"]}</a>'
             f'  </div>'
             f'  <div style="font-size:0.70rem;color:#9a9b9c;margin-top:0.35rem;">'
-            f'    <span style="background:rgba(45,50,170,0.08);color:#2d32aa;border-radius:3px;'
+            f'    <span style="background:rgba(45,50,170,0.08);color:#1d4ed8;border-radius:3px;'
             f'    padding:1px 7px;font-size:0.68rem;font-weight:600;margin-right:6px;">{n["fonte"]}</span>'
             f'    {n["data"]}'
             f'  </div>'
@@ -872,7 +892,7 @@ if st.session_state.analisi_dati:
                     unsafe_allow_html=True)
 
         ag_link_html = (
-            f'<a href="{ag_url}" target="_blank" style="color:#2d32aa;font-weight:700;'
+            f'<a href="{ag_url}" target="_blank" style="color:#1d4ed8;font-weight:700;'
             f'font-size:1.05rem;text-decoration:none;">{ag_nome}&nbsp;↗</a>'
             if ag_url else
             f'<span style="color:#1F1F20;font-weight:700;font-size:1.05rem;">{ag_nome}</span>'
@@ -898,7 +918,7 @@ if st.session_state.analisi_dati:
             list_items = "".join(
                 f'<div style="display:flex;align-items:center;gap:0.7rem;'
                 f'padding:0.55rem 0;border-bottom:1px solid #f0f2fa;">'
-                f'  <span style="color:#2d32aa;font-size:0.8rem;">↗</span>'
+                f'  <span style="color:#1d4ed8;font-size:0.8rem;">↗</span>'
                 f'  <a href="{s["url"]}" target="_blank" style="color:#1F1F20;text-decoration:none;'
                 f'  font-size:0.90rem;font-weight:500;">{s["domain"]}</a>'
                 f'</div>'
@@ -945,10 +965,22 @@ if st.session_state.analisi_dati:
 
         metodo_txt  = stima.get("metodo_stima", "")
 
+        # Breakdown carte + PayPal
+        c_min = stima.get("carte_annuo_min")
+        c_max = stima.get("carte_annuo_max")
+        p_min = stima.get("paypal_annuo_min")
+        p_max = stima.get("paypal_annuo_max")
+        q_carte  = stima.get("quota_carte", 68)
+        q_paypal = stima.get("quota_paypal", 16)
+        ragion_ai = stima.get("ragionamento_ai", "")
+
+        carte_txt  = f"{_fmt_eur(c_min)} – {_fmt_eur(c_max)}" if c_min else "—"
+        paypal_txt = f"{_fmt_eur(p_min)} – {_fmt_eur(p_max)}" if p_min else "—"
+
         # Riga hero: transato annuo
-        kpi_big     = "font-size:2rem;font-weight:800;color:#2d32aa;line-height:1.1;"
+        kpi_big     = "font-size:2rem;font-weight:800;color:#1d4ed8;line-height:1.1;"
         kpi_lbl     = "font-size:0.65rem;color:#9a9b9c;text-transform:uppercase;letter-spacing:0.07em;margin-top:0.3rem;"
-        kpi_style   = "font-size:1.25rem;font-weight:700;color:#2d32aa;line-height:1.2;"
+        kpi_style   = "font-size:1.25rem;font-weight:700;color:#1d4ed8;line-height:1.2;"
 
         # Riga extra: fatturato + SKU (se disponibili)
         extra_row = ""
@@ -987,12 +1019,29 @@ if st.session_state.analisi_dati:
             f'<div style="{CARD}margin-bottom:0.8rem;">'
             f'  <div style="text-align:center;padding:0.5rem 0 1rem;">'
             f'    <div style="{kpi_big}">{transato_txt}</div>'
-            f'    <div style="{kpi_lbl}">Transato annuo stimato &nbsp; {affid_badge}</div>'
+            f'    <div style="{kpi_lbl}">Transato carte + PayPal stimato &nbsp; {affid_badge}</div>'
             f'    <div style="font-size:0.68rem;color:#b2b4b3;margin-top:0.5rem;">'
             f'      Metodologia: {metodo_txt}'
             f'    </div>'
             f'    {cal_note}'
             f'  </div>'
+            # breakdown carte + paypal
+            f'  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin:0.8rem 0 0.4rem;">'
+            f'    <div style="background:rgba(29,78,216,0.06);border-radius:8px;padding:0.7rem 1rem;text-align:center;">'
+            f'      <div style="font-size:0.60rem;color:#9a9b9c;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.3rem;">💳 Carte (Visa/MC/Amex) · {q_carte}%</div>'
+            f'      <div style="font-size:1.1rem;font-weight:700;color:#1d4ed8;">{carte_txt}</div>'
+            f'    </div>'
+            f'    <div style="background:rgba(8,145,178,0.06);border-radius:8px;padding:0.7rem 1rem;text-align:center;">'
+            f'      <div style="font-size:0.60rem;color:#9a9b9c;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.3rem;">🅿 PayPal · {q_paypal}%</div>'
+            f'      <div style="font-size:1.1rem;font-weight:700;color:#0891b2;">{paypal_txt}</div>'
+            f'    </div>'
+            f'  </div>'
+            + (
+            f'  <div style="font-size:0.78rem;color:#374151;line-height:1.6;background:#f8faff;'
+            f'  border-left:3px solid #1d4ed8;border-radius:0 6px 6px 0;padding:0.6rem 0.9rem;margin-bottom:0.4rem;">'
+            f'  🤖 {ragion_ai}</div>'
+            if ragion_ai else ""
+            ) +
             f'  <hr style="border:none;border-top:1px solid #f0f2fa;margin:0.5rem 0;">'
             f'  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;text-align:center;margin-top:0.6rem;">'
             f'    <div><div style="{kpi_style}">{_fmt_num(stima.get("visite_mensili")) if stima.get("visite_mensili") else "n.d."}</div>'
@@ -1018,7 +1067,7 @@ if st.session_state.analisi_dati:
                 f'<div style="display:flex;justify-content:space-between;align-items:center;'
                 f'padding:0.5rem 0;border-bottom:1px solid #f0f2fa;">'
                 f'  <span style="font-size:0.88rem;color:#1F1F20;">{m["metodo"]}</span>'
-                f'  <span style="font-size:0.88rem;font-weight:600;color:#2d32aa;">{m["quota"]:.0f}%'
+                f'  <span style="font-size:0.88rem;font-weight:600;color:#1d4ed8;">{m["quota"]:.0f}%'
                 f'  &nbsp;—&nbsp; {_fmt_eur(m["gmv_min"])} / {_fmt_eur(m["gmv_max"])} annui'
                 f'  </span>'
                 f'</div>'
@@ -1035,6 +1084,71 @@ if st.session_state.analisi_dati:
                 f'</div>',
                 unsafe_allow_html=True,
             )
+
+    # ── Sezione Analisi AI ──
+    if ai_analisi:
+        st.divider()
+        st.markdown('<div class="section-heading">🤖 Scheda AI pre-call</div>', unsafe_allow_html=True)
+
+        punteggio = ai_analisi.get("punteggio_opportunita", 0)
+        stelle    = "★" * punteggio + "☆" * (5 - punteggio)
+        col_score = {1: "#e57373", 2: "#ffb74d", 3: "#ffd54f", 4: "#81c784", 5: "#1d4ed8"}
+        score_color = col_score.get(punteggio, "#9a9b9c")
+
+        tp_items = "".join(
+            f'<div style="display:flex;gap:0.6rem;align-items:flex-start;margin-bottom:0.5rem;">'
+            f'  <span style="color:#1d4ed8;font-weight:700;flex-shrink:0;">→</span>'
+            f'  <span style="font-size:0.88rem;color:#1F1F20;line-height:1.5;">{tp}</span>'
+            f'</div>'
+            for tp in ai_analisi.get("talking_points", [])
+        )
+
+        ob_items = "".join(
+            f'<div style="background:rgba(249,66,58,0.06);border-left:3px solid #f9423a;'
+            f'border-radius:4px;padding:0.5rem 0.8rem;margin-bottom:0.4rem;">'
+            f'  <span style="font-size:0.85rem;color:#1F1F20;line-height:1.5;">{ob}</span>'
+            f'</div>'
+            for ob in ai_analisi.get("obiezioni_probabili", [])
+        )
+
+        st.markdown(
+            f'<div style="{CARD}margin-bottom:0.8rem;">'
+
+            # Header: punteggio opportunità
+            f'  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;">'
+            f'    <div style="font-size:1rem;font-weight:700;color:#1F1F20;">Opportunità commerciale</div>'
+            f'    <div style="text-align:right;">'
+            f'      <div style="font-size:1.4rem;color:{score_color};letter-spacing:0.05em;">{stelle}</div>'
+            f'      <div style="font-size:0.65rem;color:#9a9b9c;">{ai_analisi.get("motivazione_punteggio","")[:80]}…</div>'
+            f'    </div>'
+            f'  </div>'
+
+            # Profilo merchant
+            f'  <div style="font-size:0.68rem;color:#9a9b9c;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.3rem;">Profilo merchant</div>'
+            f'  <div style="font-size:0.90rem;color:#1F1F20;line-height:1.6;margin-bottom:1rem;">'
+            f'    {ai_analisi.get("profilo","")}'
+            f'  </div>'
+
+            # Contesto volumi
+            f'  <div style="font-size:0.68rem;color:#9a9b9c;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.3rem;">Contesto stima volumi</div>'
+            f'  <div style="font-size:0.88rem;color:#1F1F20;line-height:1.6;background:rgba(45,50,170,0.04);'
+            f'  border-radius:6px;padding:0.7rem 0.9rem;margin-bottom:1rem;">'
+            f'    {ai_analisi.get("contesto_volumi","")}'
+            f'  </div>'
+
+            # Talking points
+            f'  <div style="font-size:0.68rem;color:#9a9b9c;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.5rem;">Punti chiave per la call</div>'
+            f'  <div style="margin-bottom:1rem;">{tp_items}</div>'
+
+            # Obiezioni
+            f'  <div style="font-size:0.68rem;color:#9a9b9c;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.5rem;">Possibili obiezioni</div>'
+            f'  <div>{ob_items}</div>'
+
+            f'  <div style="font-size:0.62rem;color:#b2b4b3;margin-top:0.8rem;">'
+            f'  Generato da Llama 3.3 70B via Groq · analisi indicativa, verifica le informazioni prima della call.</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
     # ── Sezione News & Intelligence ──
     st.divider()
@@ -1059,7 +1173,7 @@ if st.session_state.analisi_dati:
           </div>
           <div style="font-size:0.70rem;color:#9a9b9c;margin-top:0.8rem;">
             💼 M&amp;A · 🤝 Partnership · 💰 Funding · 🌍 Espansione · 💳 Pagamenti ·
-            📊 Performance · 🎪 Evento — <strong style="color:#2d32aa;">⚡ RILEVANTE NEXI</strong> = opportunità commerciale
+            📊 Performance · 🎪 Evento — <strong style="color:#1d4ed8;">⚡ RILEVANTE NEXI</strong> = opportunità commerciale
           </div>
         </div>
         """, unsafe_allow_html=True)
@@ -1081,7 +1195,7 @@ if st.session_state.analisi_dati:
 
 st.markdown(
     '<div class="nexi-footer">'
-    'NEXI S.P.A. &nbsp;·&nbsp; Strumento interno &nbsp;·&nbsp; '
+    'Merchant Intelligence &nbsp;·&nbsp; Strumento interno &nbsp;·&nbsp; '
     'Dati da fonti pubbliche (VIES, INI-PEC, siti web) &nbsp;·&nbsp; Non costituiscono dati certificati'
     '</div>',
     unsafe_allow_html=True,
