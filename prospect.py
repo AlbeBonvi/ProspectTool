@@ -2435,43 +2435,63 @@ def stima_volumi_ai(url_input, analisi, ragione_sociale=None):
         if tp_anni:
             tp_info += f", attivo da {tp_anni:.0f} anni"
 
-    segnali = "\n".join([
+    # Segnali affidabili: solo quelli reali, senza la stima rule-based (che può essere fuorviante)
+    segnali_lines = [
         f"Sito: {url_input}",
         f"Ragione sociale: {ragione_sociale or 'n.d.'}",
-        f"Categoria: {cat}",
-        f"Visite mensili stimate: {f'{visite:,}' if visite else 'n.d.'}",
-        f"Ticket medio categoria: €{ticket:.0f}",
+        f"Categoria merceologica: {cat or 'non rilevata'}",
         f"Piattaforma e-commerce: {', '.join(pf_list) if pf_list else 'non rilevata'}",
-        f"PSP attivi: {', '.join(psp_list) if psp_list else 'nessuno rilevato'}",
-        f"SKU catalogo (sitemap): {n_sku if n_sku else 'n.d.'}",
-        f"Trustpilot: {tp_info if tp_info else 'non trovato'}",
-        f"Fatturato aziendale: {_fmte(fat) if fat else 'non disponibile'}",
-        f"Stima rule-based (riferimento): {_fmte(rb_min)} – {_fmte(rb_max)}",
-    ])
+        f"PSP attivi rilevati: {', '.join(psp_list) if psp_list else 'nessuno rilevato'}",
+        f"Ticket medio stimato per categoria: {'€'+str(int(ticket)) if ticket else 'n.d.'}",
+    ]
+    if visite:
+        segnali_lines.append(f"Visite mensili (SimilarWeb — potenzialmente sovrastimate 3-5x): {visite:,}")
+    else:
+        segnali_lines.append("Visite mensili: non disponibili (dato non trovato)")
+    if n_sku:
+        segnali_lines.append(f"SKU nel catalogo (da sitemap): {n_sku:,} — NOTA: in categorie commodity (pet, food, farmacia) molti SKU non indicano alto fatturato")
+    if tp_rec:
+        segnali_lines.append(f"Trustpilot: {tp_rec:,} recensioni, voto {tp_sc:.1f}/5" + (f", attivo da {tp_anni:.0f} anni" if tp_anni else ""))
+    else:
+        segnali_lines.append("Trustpilot: non trovato")
+    if fat:
+        segnali_lines.append(f"Fatturato aziendale TOTALE (include offline/B2B): {_fmte(fat)} — la quota e-commerce è tipicamente 20-60% per aziende miste")
+    else:
+        segnali_lines.append("Fatturato aziendale: non disponibile")
+
+    segnali = "\n".join(segnali_lines)
 
     prompt_sistema = (
-        "Sei un esperto di e-commerce italiano. Stima il transato online annuo "
-        "(pagamenti con carta di credito/debito + PayPal) per un merchant italiano. "
+        "Sei un esperto di e-commerce italiano che stima i volumi di transato per conto di un PSP. "
+        "Il tuo obiettivo è stimare il transato annuo da PAGAMENTI DIGITALI (carte + PayPal) su canale e-commerce. "
+        "I tuoi errori tipici: sovrastimare. Sii sistematicamente conservativo. "
         "Rispondi ESCLUSIVAMENTE con un oggetto JSON valido."
     )
 
-    prompt_utente = f"""Stima il transato online annuo (carte + PayPal) per questo merchant.
+    prompt_utente = f"""Stima il transato e-commerce annuo (carte + PayPal) per questo merchant italiano.
 
-DATI MERCHANT:
+DATI DISPONIBILI:
 {segnali}
 
-BENCHMARK ITALIA E-COMMERCE 2024 (Osservatorio Politecnico di Milano):
-- Quota carte (Visa/MC/Amex): 65-72% del GMV online
-- Quota PayPal: 14-18% del GMV online
-- Altri (bonifico, contrassegno, BNPL, wallet): 14-21%
-- Conversion rate per categoria: moda 1.8-2.5%, elettronica 0.8-1.5%, sport 1.5-2.5%, farmacia 3-5%, food 1.5-3%, generico 1.2-2.2%
-- Ticket medio Trustpilot: ogni 1000 recensioni/anno ≈ €300K–€1M transato (dipende da settore)
+SCALA REALE e-commerce italiani (benchmark validato su dati di mercato):
+- Nano  <€300K/anno:       tipicamente <20K visite/mese, <500 recensioni Trustpilot
+- Micro €300K–1M/anno:     20K–80K visite/mese, 500–3.000 recensioni Trustpilot
+- Small €1M–5M/anno:       60K–300K visite/mese, 2.000–15.000 recensioni Trustpilot
+- Mid   €5M–20M/anno:      200K–1M visite/mese, 10.000–50.000 recensioni Trustpilot
+- Large €20M–100M/anno:    800K–5M visite/mese, 40.000+ recensioni Trustpilot
+- Top   >€100M/anno:       >3M visite/mese — solo pochi player (Zalando, Unieuro, ecc.)
 
-ISTRUZIONI:
-- Usa la stima rule-based come ancora ma ragiona su TUTTI i segnali
-- Se i segnali si contraddicono, dai più peso ai dati più affidabili (fatturato > Trustpilot > visite)
-- Sii conservativo: meglio sottostimare che sovrastimare
-- Range max/min non oltre il 40% di spread
+REGOLE CRITICHE:
+1. IGNORA il conteggio SKU come indicatore di volume: un pet shop può avere 10.000 SKU (taglie, gusti, marche) e fare solo €1-5M
+2. Le visite SimilarWeb sono spesso sovrastimate 3-5x per siti italiani medio-piccoli: usa il valore basso della fascia
+3. Il fatturato aziendale include vendite offline e B2B: il solo canale e-commerce è il 20-60% del totale per retailer misti
+4. Se mancano sia visite sia Trustpilot: sei in forte incertezza — defaulta alla fascia Micro/Small
+5. Il tuo bias naturale è sovrastimare: correggi sistematicamente verso il basso
+
+METODO:
+1. Identifica la fascia dalla TABELLA SCALA usando i segnali disponibili (Trustpilot > visite > categoria)
+2. Se i segnali mancano, usa la fascia Small (€1M–5M) come default conservativo
+3. Calcola carte e PayPal usando: carte=68% del GMV, PayPal=16% del GMV (mercato italiano 2024)
 
 Restituisci SOLO questo JSON:
 {{
@@ -2484,7 +2504,7 @@ Restituisci SOLO questo JSON:
   "quota_carte": <intero 0-100>,
   "quota_paypal": <intero 0-100>,
   "affidabilita": "<Alta|Media|Bassa>",
-  "ragionamento": "<3-4 frasi in italiano sul processo di stima>"
+  "ragionamento": "<3-4 frasi: quale fascia hai scelto, perché, quali segnali hai usato, quali erano assenti>"
 }}"""
 
     try:
@@ -2501,8 +2521,8 @@ Restituisci SOLO questo JSON:
         )
         ai = _json.loads(risposta.choices[0].message.content.strip())
 
-        gmv_min = int(ai.get("gmv_annuo_min") or rb_min or 0)
-        gmv_max = int(ai.get("gmv_annuo_max") or rb_max or 0)
+        gmv_min = int(ai.get("gmv_annuo_min") or 1_000_000)
+        gmv_max = int(ai.get("gmv_annuo_max") or 3_000_000)
         q_carte   = int(ai.get("quota_carte", 68))
         q_paypal  = int(ai.get("quota_paypal", 16))
 
