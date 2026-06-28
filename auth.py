@@ -13,17 +13,21 @@ import requests
 
 # ── Helpers REST Supabase ──────────────────────────────────────
 
-def _sb_headers():
-    key = os.environ.get("SUPABASE_KEY", "")
-    return {
-        "apikey":        key,
-        "Authorization": f"Bearer {key}",
-        "Content-Type":  "application/json",
-        "Prefer":        "return=representation",
+def _sb_headers(write=False):
+    key = os.environ.get("SUPABASE_KEY", "").strip()
+    h = {
+        "apikey":          key,
+        "Authorization":   f"Bearer {key}",
+        "Accept-Profile":  "public",
     }
+    if write:
+        h["Content-Type"]    = "application/json"
+        h["Content-Profile"] = "public"
+        h["Prefer"]          = "return=representation"
+    return h
 
 def _sb_url(path):
-    base = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    base = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
     return f"{base}/rest/v1/{path}"
 
 def _sb_ok():
@@ -66,7 +70,7 @@ def registra_utente(username: str, email: str, password: str):
     try:
         r = requests.post(
             _sb_url("mi_users"),
-            headers=_sb_headers(),
+            headers=_sb_headers(write=True),
             json={
                 "username":      username.strip(),
                 "email":         email.strip().lower(),
@@ -111,7 +115,7 @@ def scala_credito(user_id: str) -> bool:
     try:
         r = requests.patch(
             _sb_url("mi_users"),
-            headers=_sb_headers(),
+            headers=_sb_headers(write=True),
             params={"id": f"eq.{user_id}"},
             json={"credits": saldo - 1},
             timeout=8,
@@ -124,22 +128,25 @@ def scala_credito(user_id: str) -> bool:
 # ── Diagnostica ────────────────────────────────────────────────
 
 def test_connessione() -> str:
-    if not os.environ.get("SUPABASE_URL"):
+    url_env = os.environ.get("SUPABASE_URL", "").strip()
+    key_env = os.environ.get("SUPABASE_KEY", "").strip()
+    if not url_env:
         return "❌ SUPABASE_URL mancante nei secrets"
-    if not os.environ.get("SUPABASE_KEY"):
+    if not key_env:
         return "❌ SUPABASE_KEY mancante nei secrets"
+    endpoint = _sb_url("mi_users")
     try:
         r = requests.get(
-            _sb_url("mi_users"),
+            endpoint,
             headers=_sb_headers(),
             params={"select": "id", "limit": "1"},
             timeout=8,
         )
         if r.status_code == 200:
-            return "✅ Connessione Supabase OK"
-        return f"❌ HTTP {r.status_code}: {r.text[:150]}"
+            return f"✅ OK — URL: {endpoint}"
+        return f"❌ HTTP {r.status_code} — URL: {endpoint} — {r.text[:200]}"
     except Exception as e:
-        return f"❌ Errore connessione: {e}"
+        return f"❌ Errore: {e} — URL: {endpoint}"
 
 
 # ── XPay HPP ───────────────────────────────────────────────────
