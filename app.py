@@ -764,30 +764,9 @@ if _user:
                     )
                 with _col_b:
                     if _xpay_configurato:
-                        _form = genera_form_pagamento(_user["id"], idx, _app_url)
-                        if _form:
-                            _action = _form["action"]
-                            _fields_js = ", ".join(
-                                f'"{k}": "{v}"'
-                                for k, v in _form.items() if k != "action"
-                            )
-                            _js = f"""<script>
-function pay_{idx}() {{
-  var f = document.createElement('form');
-  f.method = 'POST'; f.action = '{_action}';
-  var d = {{{_fields_js}}};
-  for (var k in d) {{
-    var i = document.createElement('input');
-    i.type = 'hidden'; i.name = k; i.value = d[k];
-    f.appendChild(i);
-  }}
-  document.body.appendChild(f); f.submit();
-}}
-</script>
-<button onclick="pay_{idx}()" style="background:#1d4ed8;color:#fff;border:none;
-border-radius:6px;padding:8px 16px;font-weight:700;font-size:0.88rem;
-cursor:pointer;width:100%;">{pkg["prezzo"]} →</button>"""
-                            st.markdown(_js, unsafe_allow_html=True)
+                        _xpay_url = genera_url_pagamento(_user["id"], idx, _app_url)
+                        if _xpay_url:
+                            st.link_button(pkg["prezzo"], _xpay_url, use_container_width=True)
                     else:
                         st.markdown(
                             f'<span style="color:rgba(255,255,255,0.50);">{pkg["prezzo"]}</span>',
