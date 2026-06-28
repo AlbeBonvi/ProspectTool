@@ -1,91 +1,58 @@
 """
 auth.py — Sistema autenticazione + crediti + XPay per Merchant Intelligence.
 
-Stack:
-- Supabase (PostgreSQL) per utenti e transazioni
-- bcrypt per hashing password
-- XPay HPP (Hosted Payment Page) per pagamenti
-
-Schema SQL Supabase (da eseguire una volta nel pannello SQL):
-
-    create table mi_users (
-        id uuid default uuid_generate_v4() primary key,
-        username text unique not null,
-        email text unique not null,
-        password_hash text not null,
-        credits integer default 0,
-        is_admin boolean default false,
-        created_at timestamptz default now()
-    );
-
-    create table mi_transactions (
-        id uuid default uuid_generate_v4() primary key,
-        user_id uuid references mi_users(id),
-        credits_added integer not null,
-        amount_eur numeric(10,2) not null,
-        xpay_order_id text unique,
-        status text default 'pending',
-        created_at timestamptz default now()
-    );
+Usa l'API REST di Supabase direttamente con requests (nessuna libreria extra).
 """
 
 import hashlib
 import hmac
 import os
 import time
-import uuid
-
-# ── Supabase client (lazy import) ─────────────────────────────
-def _get_supabase():
-    try:
-        from supabase import create_client
-        url = os.environ.get("SUPABASE_URL", "")
-        key = os.environ.get("SUPABASE_KEY", "")
-        if not url or not key:
-            return None
-        return create_client(url, key)
-    except ImportError:
-        return None
-    except Exception:
-        return None
+import requests
 
 
-def test_connessione() -> str:
-    """Ritorna stringa diagnostica sullo stato della connessione."""
-    url = os.environ.get("SUPABASE_URL", "")
+# ── Helpers REST Supabase ──────────────────────────────────────
+
+def _sb_headers():
     key = os.environ.get("SUPABASE_KEY", "")
-    if not url:
-        return "❌ SUPABASE_URL mancante nei secrets"
-    if not key:
-        return "❌ SUPABASE_KEY mancante nei secrets"
-    sb = _get_supabase()
-    if not sb:
-        return "❌ Impossibile creare il client Supabase (libreria mancante?)"
-    try:
-        sb.table("mi_users").select("id").limit(1).execute()
-        return "✅ Connessione Supabase OK"
-    except Exception as e:
-        return f"❌ Errore query: {e}"
+    return {
+        "apikey":        key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type":  "application/json",
+        "Prefer":        "return=representation",
+    }
+
+def _sb_url(path):
+    base = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    return f"{base}/rest/v1/{path}"
+
+def _sb_ok():
+    return bool(os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_KEY"))
 
 
-# ── Password hashing (SHA-256 + salt via HMAC) ─────────────────
+# ── Password hashing ───────────────────────────────────────────
+
 def _hash_pwd(password: str) -> str:
     secret = os.environ.get("APP_SECRET", "merchant-intelligence-secret")
     return hmac.new(secret.encode(), password.encode(), hashlib.sha256).hexdigest()
 
 
+# ── Auth ───────────────────────────────────────────────────────
+
 def verifica_credenziali(username: str, password: str):
-    """
-    Ritorna il dict utente se le credenziali sono corrette, None altrimenti.
-    """
-    sb = _get_supabase()
-    if not sb:
+    if not _sb_ok():
         return None
     try:
-        res = sb.table("mi_users").select("*").eq("username", username.strip()).execute()
-        if not res.data:
+        r = requests.get(
+            _sb_url("mi_users"),
+            headers=_sb_headers(),
+            params={"username": f"eq.{username.strip()}", "select": "*"},
+            timeout=8,
+        )
+        data = r.json()
+        if not isinstance(data, list) or not data:
             return None
-        user = res.data[0]
+        user = data[0]
         if user["password_hash"] == _hash_pwd(password):
             return user
         return None
@@ -94,156 +61,179 @@ def verifica_credenziali(username: str, password: str):
 
 
 def registra_utente(username: str, email: str, password: str):
-    """
-    Crea un nuovo utente con 3 crediti di benvenuto.
-    Ritorna (True, user_dict) o (False, messaggio_errore).
-    """
-    sb = _get_supabase()
-    if not sb:
-        return False, "Database non raggiungibile."
+    if not _sb_ok():
+        return False, "Secrets Supabase non configurati."
     try:
-        res = sb.table("mi_users").insert({
-            "username":      username.strip(),
-            "email":         email.strip().lower(),
-            "password_hash": _hash_pwd(password),
-            "credits":       3,
-        }).execute()
-        return True, res.data[0]
-    except Exception as e:
-        msg = str(e)
+        r = requests.post(
+            _sb_url("mi_users"),
+            headers=_sb_headers(),
+            json={
+                "username":      username.strip(),
+                "email":         email.strip().lower(),
+                "password_hash": _hash_pwd(password),
+                "credits":       3,
+            },
+            timeout=8,
+        )
+        if r.status_code in (200, 201):
+            data = r.json()
+            return True, data[0] if isinstance(data, list) else data
+        msg = r.text
         if "duplicate" in msg.lower() or "unique" in msg.lower():
             return False, "Username o email già registrati."
-        return False, f"Errore: {msg}"
+        return False, f"Errore {r.status_code}: {msg[:200]}"
+    except Exception as e:
+        return False, f"Errore connessione: {e}"
 
+
+# ── Crediti ────────────────────────────────────────────────────
 
 def get_crediti(user_id: str) -> int:
-    """Ritorna il saldo crediti aggiornato dal DB."""
-    sb = _get_supabase()
-    if not sb:
+    if not _sb_ok():
         return 0
     try:
-        res = sb.table("mi_users").select("credits").eq("id", user_id).execute()
-        return res.data[0]["credits"] if res.data else 0
+        r = requests.get(
+            _sb_url("mi_users"),
+            headers=_sb_headers(),
+            params={"id": f"eq.{user_id}", "select": "credits"},
+            timeout=8,
+        )
+        data = r.json()
+        return data[0]["credits"] if isinstance(data, list) and data else 0
     except Exception:
         return 0
 
 
 def scala_credito(user_id: str) -> bool:
-    """
-    Scala 1 credito. Ritorna True se la scalata è avvenuta, False se i crediti
-    erano già 0 o c'è stato un errore.
-    """
-    sb = _get_supabase()
-    if not sb:
+    saldo = get_crediti(user_id)
+    if saldo <= 0:
         return False
     try:
-        # Legge il saldo corrente
-        res = sb.table("mi_users").select("credits").eq("id", user_id).execute()
-        if not res.data:
-            return False
-        saldo = res.data[0]["credits"]
-        if saldo <= 0:
-            return False
-        # Scala atomicamente
-        sb.table("mi_users").update({"credits": saldo - 1}).eq("id", user_id).execute()
-        return True
+        r = requests.patch(
+            _sb_url("mi_users"),
+            headers=_sb_headers(),
+            params={"id": f"eq.{user_id}"},
+            json={"credits": saldo - 1},
+            timeout=8,
+        )
+        return r.status_code in (200, 204)
     except Exception:
         return False
 
 
-# ── XPay HPP (Hosted Payment Page) ────────────────────────────
+# ── Diagnostica ────────────────────────────────────────────────
 
-XPAY_BASE_URL = "https://xpay.nexigroup.com/api/phoenix-0.0/pay/orders/hpp"
-XPAY_SANDBOX_URL = "https://int-ecommerce.nexi.it/ecomm/ecomm/DispatcherServlet"
+def test_connessione() -> str:
+    if not os.environ.get("SUPABASE_URL"):
+        return "❌ SUPABASE_URL mancante nei secrets"
+    if not os.environ.get("SUPABASE_KEY"):
+        return "❌ SUPABASE_KEY mancante nei secrets"
+    try:
+        r = requests.get(
+            _sb_url("mi_users"),
+            headers=_sb_headers(),
+            params={"select": "id", "limit": "1"},
+            timeout=8,
+        )
+        if r.status_code == 200:
+            return "✅ Connessione Supabase OK"
+        return f"❌ HTTP {r.status_code}: {r.text[:150]}"
+    except Exception as e:
+        return f"❌ Errore connessione: {e}"
+
+
+# ── XPay HPP ───────────────────────────────────────────────────
 
 PACCHETTI_CREDITI = [
-    {"crediti": 10,  "eur": "9.90",   "label": "10 ricerche — €9,90"},
-    {"crediti": 30,  "eur": "24.90",  "label": "30 ricerche — €24,90"},
-    {"crediti": 100, "eur": "69.90",  "label": "100 ricerche — €69,90"},
+    {"crediti": 10,  "eur": "9.90",  "label": "10 ricerche — €9,90"},
+    {"crediti": 30,  "eur": "24.90", "label": "30 ricerche — €24,90"},
+    {"crediti": 100, "eur": "69.90", "label": "100 ricerche — €69,90"},
 ]
+
+XPAY_SANDBOX_URL = "https://int-ecommerce.nexi.it/ecomm/ecomm/DispatcherServlet"
+XPAY_LIVE_URL    = "https://ecommerce.nexi.it/ecomm/ecomm/DispatcherServlet"
 
 
 def _xpay_mac(fields: dict, secret: str) -> str:
-    """Calcola il MAC XPay (SHA-1 su stringa campi ordinati)."""
     ordered = ["alias", "importo", "divisa", "codTrans", "url", "urlpost"]
     raw = "".join(f"{k}{fields[k]}" for k in ordered if k in fields)
     raw += secret
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()
 
 
-def genera_url_pagamento(user_id: str, pacchetto_idx: int, return_url: str) -> str | None:
-    """
-    Genera l'URL HPP XPay per acquistare un pacchetto di crediti.
-    Ritorna l'URL a cui redirigere l'utente, o None se mancano le credenziali XPay.
-    """
+def genera_url_pagamento(user_id: str, pacchetto_idx: int, return_url: str):
     alias  = os.environ.get("XPAY_ALIAS", "")
     secret = os.environ.get("XPAY_SECRET", "")
     if not alias or not secret:
         return None
 
-    pacchetto = PACCHETTI_CREDITI[pacchetto_idx]
+    pkg       = PACCHETTI_CREDITI[pacchetto_idx]
     cod_trans = f"MI-{user_id[:8]}-{int(time.time())}"
-    importo   = pacchetto["eur"].replace(".", "")  # XPay vuole centesimi come stringa: "990"
+    importo   = pkg["eur"].replace(".", "")
 
-    sb = _get_supabase()
-    if sb:
+    if _sb_ok():
         try:
-            sb.table("mi_transactions").insert({
-                "user_id":       user_id,
-                "credits_added": pacchetto["crediti"],
-                "amount_eur":    float(pacchetto["eur"]),
-                "xpay_order_id": cod_trans,
-                "status":        "pending",
-            }).execute()
+            requests.post(
+                _sb_url("mi_transactions"),
+                headers=_sb_headers(),
+                json={
+                    "user_id":       user_id,
+                    "credits_added": pkg["crediti"],
+                    "amount_eur":    float(pkg["eur"]),
+                    "xpay_order_id": cod_trans,
+                    "status":        "pending",
+                },
+                timeout=8,
+            )
         except Exception:
             pass
 
+    ok_url = return_url + f"?xpay_ok=1&cod={cod_trans}"
     fields = {
         "alias":    alias,
         "importo":  importo,
         "divisa":   "EUR",
         "codTrans": cod_trans,
-        "url":      return_url + f"?xpay_ok=1&cod={cod_trans}",
-        "urlpost":  return_url + f"?xpay_ok=1&cod={cod_trans}",
+        "url":      ok_url,
+        "urlpost":  ok_url,
     }
-    mac = _xpay_mac(fields, secret)
-
-    sandbox = os.environ.get("XPAY_SANDBOX", "true").lower() == "true"
-    base = XPAY_SANDBOX_URL if sandbox else XPAY_BASE_URL
-
+    mac  = _xpay_mac(fields, secret)
+    base = XPAY_SANDBOX_URL if os.environ.get("XPAY_SANDBOX", "true").lower() == "true" else XPAY_LIVE_URL
     params = "&".join(f"{k}={v}" for k, v in fields.items())
     return f"{base}?{params}&mac={mac}"
 
 
 def conferma_pagamento(cod_trans: str) -> bool:
-    """
-    Chiamata dopo il return dell'utente da XPay.
-    Aggiorna la transazione a 'completed' e accredita i crediti.
-    Ritorna True se l'accredito è avvenuto.
-    """
-    sb = _get_supabase()
-    if not sb:
+    if not _sb_ok():
         return False
     try:
-        res = sb.table("mi_transactions") \
-                .select("*") \
-                .eq("xpay_order_id", cod_trans) \
-                .eq("status", "pending") \
-                .execute()
-        if not res.data:
+        r = requests.get(
+            _sb_url("mi_transactions"),
+            headers=_sb_headers(),
+            params={"xpay_order_id": f"eq.{cod_trans}", "status": "eq.pending", "select": "*"},
+            timeout=8,
+        )
+        data = r.json()
+        if not isinstance(data, list) or not data:
             return False
-        tx = res.data[0]
+        tx = data[0]
 
-        # Aggiorna stato
-        sb.table("mi_transactions").update({"status": "completed"}) \
-          .eq("id", tx["id"]).execute()
+        requests.patch(
+            _sb_url("mi_transactions"),
+            headers=_sb_headers(),
+            params={"id": f"eq.{tx['id']}"},
+            json={"status": "completed"},
+            timeout=8,
+        )
 
-        # Accredita crediti
-        cur = sb.table("mi_users").select("credits").eq("id", tx["user_id"]).execute()
-        saldo = cur.data[0]["credits"] if cur.data else 0
-        sb.table("mi_users").update({"credits": saldo + tx["credits_added"]}) \
-          .eq("id", tx["user_id"]).execute()
-
+        saldo = get_crediti(tx["user_id"])
+        requests.patch(
+            _sb_url("mi_users"),
+            headers=_sb_headers(),
+            params={"id": f"eq.{tx['user_id']}"},
+            json={"credits": saldo + tx["credits_added"]},
+            timeout=8,
+        )
         return True
     except Exception:
         return False
