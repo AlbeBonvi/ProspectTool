@@ -189,10 +189,10 @@ def genera_url_pagamento(user_id: str, pacchetto_idx: int, return_url: str):
     importo   = str(pkg["centesimi"])   # centesimi interi: €2,00 → "200"
     divisa    = "978"                   # XPay HPP: codice ISO 4217 numerico (EUR = 978)
     base_ret  = return_url.rstrip("/")
-    ok_url    = f"{base_ret}?xpay_ok=1&cod={cod_trans}"
-    ko_url    = f"{base_ret}?xpay_ko=1&cod={cod_trans}"
+    ok_url    = f"{base_ret}?xpay_ok=1"
+    ko_url    = f"{base_ret}?xpay_ko=1"
 
-    # MAC si calcola con i valori RAW (non encoded)
+    # MAC con URL puliti (XPay decodifica i param e ri-splitta su &)
     mac = _xpay_mac_request(alias, importo, divisa, cod_trans, ok_url, ko_url, secret)
 
     if _sb_ok():
