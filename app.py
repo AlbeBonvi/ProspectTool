@@ -486,6 +486,18 @@ st.markdown("""
   [data-testid="stTabs"] p {
     color: rgba(255,255,255,0.85) !important;
   }
+  /* Bottone submit dentro i form delle tab — blu con testo bianco */
+  [data-testid="stTabs"] [data-testid="stFormSubmitButton"] > button,
+  [data-testid="stTabs"] div[data-testid="stButton"] > button {
+    background-color: #1d4ed8 !important;
+    color: #ffffff !important;
+    border: none !important;
+    font-weight: 700 !important;
+  }
+  [data-testid="stTabs"] [data-testid="stFormSubmitButton"] > button:hover,
+  [data-testid="stTabs"] div[data-testid="stButton"] > button:hover {
+    background-color: #1e3a8a !important;
+  }
   /* Niente rosso: success e error messages */
   [data-testid="stAlert"][data-baseweb="notification"] {
     border-left-color: #48d597 !important;
