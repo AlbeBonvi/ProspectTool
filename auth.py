@@ -9,7 +9,6 @@ import hmac
 import os
 import time
 import requests
-from urllib.parse import quote
 
 
 # ── Helpers REST Supabase ──────────────────────────────────────
@@ -214,10 +213,11 @@ def genera_url_pagamento(user_id: str, pacchetto_idx: int, return_url: str):
 
     sandbox = os.environ.get("XPAY_SANDBOX", "true").lower() == "true"
     base    = XPAY_SANDBOX_URL if sandbox else XPAY_LIVE_URL
+    # url e urlpost passati non-encoded (non contengono & o ?)
     params  = (f"alias={alias}&importo={importo}&divisa={divisa}"
                f"&codTrans={cod_trans}"
-               f"&url={quote(ok_url, safe='')}"
-               f"&urlpost={quote(ko_url, safe='')}"
+               f"&url={ok_url}"
+               f"&urlpost={ko_url}"
                f"&mac={mac}&languageId=ITA")
     return f"{base}?{params}"
 
