@@ -101,6 +101,15 @@ st.markdown("""
   /* Divider su sfondo blu */
   hr { border-color: rgba(255,255,255,0.15) !important; }
 
+  /* Spinner / status loading — testo bianco su sfondo scuro */
+  [data-testid="stSpinner"] p,
+  [data-testid="stSpinner"] span,
+  [data-testid="stStatusWidget"] p,
+  [data-testid="stStatusWidget"] span,
+  .stSpinner p, .stSpinner span {
+    color: #FFFFFF !important;
+  }
+
   /* Label input: bianche sul blu */
   [data-testid="stTextInput"] label,
   [data-testid="stTextInput"] label p,
