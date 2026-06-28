@@ -780,9 +780,10 @@ else:
                     st.caption(test_connessione())
 
     st.divider()
+    st.stop()
 
 # ──────────────────────────────────────────────────────────────
-# FORM DI INPUT
+# FORM DI INPUT (solo utenti loggati)
 # ──────────────────────────────────────────────────────────────
 
 col_piva, col_url, col_btn = st.columns([2, 3, 1.2])
