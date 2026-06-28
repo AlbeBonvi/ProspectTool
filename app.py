@@ -764,21 +764,9 @@ if _user:
                     )
                 with _col_b:
                     if _xpay_configurato:
-                        _form = genera_form_pagamento(_user["id"], idx, _app_url)
-                        if _form:
-                            _fields = "".join(
-                                f'<input type="hidden" name="{k}" value="{v}">'
-                                for k, v in _form.items() if k != "action"
-                            )
-                            st.markdown(
-                                f'<form method="POST" action="{_form["action"]}" style="margin:0">'
-                                f'{_fields}'
-                                f'<button type="submit" style="background:#1d4ed8;color:#fff;'
-                                f'border:none;border-radius:6px;padding:8px 18px;font-weight:700;'
-                                f'font-size:0.88rem;cursor:pointer;width:100%;">'
-                                f'{pkg["prezzo"]} →</button></form>',
-                                unsafe_allow_html=True,
-                            )
+                        _xpay_url = genera_url_pagamento(_user["id"], idx, _app_url)
+                        if _xpay_url:
+                            st.link_button(pkg["prezzo"], _xpay_url, use_container_width=True)
                     else:
                         st.markdown(
                             f'<span style="color:rgba(255,255,255,0.50);">{pkg["prezzo"]}</span>',
