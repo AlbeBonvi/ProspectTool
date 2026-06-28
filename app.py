@@ -596,6 +596,30 @@ def build_csv(piva, ragione, stato, pec, analisi):
 
 
 # ──────────────────────────────────────────────────────────────
+# SESSION STATE — deve stare qui, prima di qualsiasi uso
+# ──────────────────────────────────────────────────────────────
+if "analisi_dati" not in st.session_state:
+    st.session_state.analisi_dati = None
+if "portfolio_agenzia" not in st.session_state:
+    st.session_state.portfolio_agenzia = None
+if "user" not in st.session_state:
+    st.session_state.user = None
+if "auth_tab" not in st.session_state:
+    st.session_state.auth_tab = "login"
+if "analizzando_step" not in st.session_state:
+    st.session_state.analizzando_step = ""
+
+# ── Gestione return da XPay ───────────────────────────────────
+_params = st.query_params
+if _params.get("xpay_ok") == "1" and st.session_state.user:
+    _cod = _params.get("cod", "")
+    if _cod and conferma_pagamento(_cod):
+        crediti_aggiornati = get_crediti(st.session_state.user["id"])
+        st.session_state.user["credits"] = crediti_aggiornati
+        st.query_params.clear()
+        st.success(f"✅ Pagamento confermato! Ora hai **{crediti_aggiornati} crediti**.")
+
+# ──────────────────────────────────────────────────────────────
 # HEADER NEXI
 # ──────────────────────────────────────────────────────────────
 
@@ -711,31 +735,6 @@ else:
                     st.error(result)
 
     st.divider()
-
-
-# ──────────────────────────────────────────────────────────────
-# SESSION STATE
-# ──────────────────────────────────────────────────────────────
-if "analisi_dati" not in st.session_state:
-    st.session_state.analisi_dati = None
-if "portfolio_agenzia" not in st.session_state:
-    st.session_state.portfolio_agenzia = None
-if "user" not in st.session_state:
-    st.session_state.user = None          # dict utente loggato
-if "auth_tab" not in st.session_state:
-    st.session_state.auth_tab = "login"   # "login" | "register" | "buy"
-if "analizzando_step" not in st.session_state:
-    st.session_state.analizzando_step = ""
-
-# ── Gestione return da XPay ────────────────────────────────────
-_params = st.query_params
-if _params.get("xpay_ok") == "1" and st.session_state.user:
-    _cod = _params.get("cod", "")
-    if _cod and conferma_pagamento(_cod):
-        crediti_aggiornati = get_crediti(st.session_state.user["id"])
-        st.session_state.user["credits"] = crediti_aggiornati
-        st.query_params.clear()
-        st.success(f"✅ Pagamento confermato! Ora hai **{crediti_aggiornati} crediti**.")
 
 # ──────────────────────────────────────────────────────────────
 # FORM DI INPUT
