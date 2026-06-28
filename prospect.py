@@ -1203,7 +1203,110 @@ def _campiona_prezzi(html_home, url_base):
 
 
 # ==============================================================
-# BLOCCO 6a-bis – HELPER STIMA: TRUSTPILOT + RECENSIONI SITO
+# BLOCCO 6a-bis – HELPER STIMA: GOOGLE REVIEWS + SHOPPING
+# ==============================================================
+
+def _estrai_aggregate_rating(html):
+    """Estrae (n_recensioni, voto) da JSON-LD aggregateRating in un HTML."""
+    if not html:
+        return None, None
+    for pat in [
+        r'"ratingValue"\s*:\s*"?([\d.,]+)"?.{0,200}"reviewCount"\s*:\s*"?(\d+)"?',
+        r'"reviewCount"\s*:\s*"?(\d+)"?.{0,200}"ratingValue"\s*:\s*"?([\d.,]+)"?',
+    ]:
+        m = re.search(pat, html, re.S)
+        if m:
+            try:
+                g1, g2 = m.group(1), m.group(2)
+                v1 = float(g1.replace(',', '.'))
+                v2 = float(g2.replace(',', '.'))
+                if 1.0 <= v1 <= 5.0 and v2 >= 3:
+                    return int(v2), round(v1, 1)
+                if 1.0 <= v2 <= 5.0 and v1 >= 3:
+                    return int(v1), round(v2, 1)
+            except Exception:
+                pass
+    return None, None
+
+
+def _cerca_recensioni_google(url_base, ragione_sociale=None):
+    """
+    Cerca le recensioni del merchant dalla sua homepage e pagine interne.
+    Estrae aggregateRating JSON-LD (presente quando il merchant embeds
+    Trustpilot widget, Google Reviews widget, Feedaty, ecc.)
+    Ritorna (n_recensioni, voto) o (None, None).
+    """
+    base = url_base if url_base.startswith('http') else 'https://' + url_base
+
+    html_home = scarica_pagina(base, timeout=8)
+    n, v = _estrai_aggregate_rating(html_home)
+    if n:
+        return n, v
+
+    # Pagine tipicamente ricche di review schema
+    for suf in ['/chi-siamo', '/about', '/azienda', '/reviews', '/recensioni', '/feedback']:
+        html_p = scarica_pagina(base.rstrip('/') + suf, timeout=5)
+        n, v = _estrai_aggregate_rating(html_p)
+        if n:
+            return n, v
+
+    return None, None
+
+
+def _rileva_google_shopping(html_totale, url_base):
+    """
+    Rileva se il merchant usa Google Shopping / Google Ads.
+    Controlla ads.txt, Google Ads tag, Product+Offer JSON-LD,
+    GTM container (scaricato), product feed.
+    Ritorna (bool, stringa_evidenza).
+    """
+    segnali = []
+
+    # 1. ads.txt — obbligatorio per tutti i siti che comprano traffico Google
+    ads_txt = scarica_pagina(url_base.rstrip('/') + '/ads.txt', timeout=4)
+    if ads_txt and 'google.com' in ads_txt.lower():
+        segnali.append("ads.txt Google")
+
+    if html_totale:
+        # 2. Google Ads tag diretto nell'HTML
+        if re.search(r'["\']AW-\d{6,}', html_totale):
+            segnali.append("Google Ads tag")
+        if "googleadservices.com" in html_totale:
+            segnali.append("Google Ads conversion")
+
+        # 3. Product JSON-LD + Offer (prerequisito per eligibilità Google Shopping)
+        if (re.search(r'"@type"\s*:\s*"Product"', html_totale, re.I) and
+                re.search(r'"@type"\s*:\s*"Offer"', html_totale, re.I)):
+            segnali.append("product+offer schema")
+
+        # 4. Google Merchant Center conversion pixel
+        if re.search(r'send_to[^"\']*["\']AW-\d+/', html_totale):
+            segnali.append("GMC pixel")
+
+        # 5. GTM presente → scarica container JS e cerca AW-
+        if "Google Ads tag" not in segnali:
+            gtm_m = re.search(r'googletagmanager\.com/gtm\.js\?id=(GTM-[A-Z0-9]+)', html_totale)
+            if gtm_m:
+                gtm_js = scarica_pagina(
+                    f"https://www.googletagmanager.com/gtm.js?id={gtm_m.group(1)}", timeout=6
+                )
+                if gtm_js and re.search(r'AW-\d{6,}', gtm_js):
+                    segnali.append("Google Ads via GTM")
+
+    # 6. Product feed a URL standard
+    for feed_path in ["/feed.xml", "/feeds/google.xml", "/google-feed.xml", "/product-feed.xml"]:
+        fh = scarica_pagina(url_base.rstrip('/') + feed_path, timeout=4)
+        if fh and ('g:id' in fh or 'g:price' in fh):
+            segnali.append("product feed Google")
+            break
+
+    if segnali:
+        return True, ", ".join(segnali)
+    return False, ""
+
+
+# ==============================================================
+# BLOCCO 6a-ter – HELPER STIMA: TRUSTPILOT + RECENSIONI SITO
 # ==============================================================
 
 def _scrape_trustpilot(domain):
@@ -1613,9 +1716,18 @@ def stima_volumi_ecommerce(url_input, analisi, ragione_sociale=None):
     # ── STEP 3c: cerca fatturato totale aziendale ─────────────────────────
     fatturato_tot, fonte_fatturato = _cerca_fatturato(url_input, ragione_sociale)
 
+    # ── STEP 3d: Google Reviews ───────────────────────────────────────────
+    n_rec_google, score_google = _cerca_recensioni_google(url_input, ragione_sociale)
+
+    # ── STEP 3e: Google Shopping ──────────────────────────────────────────
+    ha_google_shopping, gshop_evidenza = _rileva_google_shopping(html_home or "", url_input)
+
     # ── STEP 4: stima ordini annui da recensioni ──────────────────────────
     review_rate     = _REVIEW_RATE.get(categoria_label, 0.025)
-    n_rec_best      = n_rec_tp if n_rec_tp else n_rec_sito  # preferisci TP
+    # Priorità: Trustpilot > Google Reviews > recensioni sito
+    # Google Reviews: tasso di recensione ~5x più alto di Trustpilot → scaliamo di 0.2
+    n_rec_google_adj = int(n_rec_google * 0.20) if n_rec_google else 0
+    n_rec_best      = n_rec_tp if n_rec_tp else (n_rec_google_adj if n_rec_google_adj else n_rec_sito)
 
     transato_annuo_rec = None
     ordini_annui_rec   = None
@@ -1821,6 +1933,12 @@ def stima_volumi_ecommerce(url_input, analisi, ragione_sociale=None):
         "recensioni_sito":       n_rec_sito or None,
         "visite_mensili":        visite,
         "n_sku":                 n_sku,
+        # Google Reviews
+        "recensioni_google":     n_rec_google,
+        "score_google":          score_google,
+        # Google Shopping
+        "google_shopping":       ha_google_shopping,
+        "google_shopping_note":  gshop_evidenza if ha_google_shopping else None,
         # Fatturato aziendale (se trovato)
         "fatturato_totale":      fatturato_tot,
         "fonte_fatturato":       fonte_fatturato if fatturato_tot else None,
@@ -2430,10 +2548,14 @@ def stima_volumi_ai(url_input, analisi, ragione_sociale=None):
 
     visite   = base.get("visite_mensili")
     ticket   = base.get("ticket_medio") or 0
-    n_sku    = base.get("n_sku")
-    tp_rec   = base.get("recensioni_trustpilot")
-    tp_sc    = base.get("score_trustpilot")
-    tp_anni  = base.get("anni_attivi_tp")
+    n_sku       = base.get("n_sku")
+    tp_rec      = base.get("recensioni_trustpilot")
+    tp_sc       = base.get("score_trustpilot")
+    tp_anni     = base.get("anni_attivi_tp")
+    g_rec       = base.get("recensioni_google")
+    g_sc        = base.get("score_google")
+    g_shopping  = base.get("google_shopping", False)
+    g_shop_note = base.get("google_shopping_note", "")
     fat      = base.get("fatturato_totale")
     cat      = base.get("categoria", "generico")
     rb_min   = base.get("transato_annuo_min")
@@ -2466,6 +2588,14 @@ def stima_volumi_ai(url_input, analisi, ragione_sociale=None):
         segnali_lines.append(f"Trustpilot: {tp_rec:,} recensioni, voto {tp_sc:.1f}/5" + (f", attivo da {tp_anni:.0f} anni" if tp_anni else ""))
     else:
         segnali_lines.append("Trustpilot: non trovato")
+    if g_rec:
+        segnali_lines.append(f"Google Reviews: {g_rec:,} recensioni, voto {g_sc:.1f}/5 — NOTA: su Google il tasso di recensione è ~5x più alto che su Trustpilot, quindi dividere per 5 per confronto")
+    else:
+        segnali_lines.append("Google Reviews: non trovate")
+    if g_shopping:
+        segnali_lines.append(f"Google Shopping: SÌ ({g_shop_note}) — segnale che il merchant investe in advertising, indica volume minimo significativo")
+    else:
+        segnali_lines.append("Google Shopping: non rilevato")
     if fat:
         segnali_lines.append(f"Fatturato aziendale TOTALE (include offline/B2B): {_fmte(fat)} — la quota e-commerce è tipicamente 20-60% per aziende miste")
     else:
@@ -2486,12 +2616,14 @@ DATI DISPONIBILI:
 {segnali}
 
 SCALA REALE e-commerce italiani (benchmark validato su dati di mercato):
-- Nano  <€300K/anno:       tipicamente <20K visite/mese, <500 recensioni Trustpilot
-- Micro €300K–1M/anno:     20K–80K visite/mese, 500–3.000 recensioni Trustpilot
-- Small €1M–5M/anno:       60K–300K visite/mese, 2.000–15.000 recensioni Trustpilot
-- Mid   €5M–20M/anno:      200K–1M visite/mese, 10.000–50.000 recensioni Trustpilot
-- Large €20M–100M/anno:    800K–5M visite/mese, 40.000+ recensioni Trustpilot
-- Top   >€100M/anno:       >3M visite/mese — solo pochi player (Zalando, Unieuro, ecc.)
+- Nano  <€300K/anno:    <20K visite/mese,   <500 rec. Trustpilot,   <2.500 rec. Google
+- Micro €300K–1M:       20K–80K visite,      500–3K rec. TP,         2.500–15K rec. Google
+- Small €1M–5M:         60K–300K visite,     2K–15K rec. TP,         10K–75K rec. Google
+- Mid   €5M–20M:        200K–1M visite,      10K–50K rec. TP,        50K–250K rec. Google
+- Large €20M–100M:      800K–5M visite,      40K+ rec. TP,           200K+ rec. Google
+- Top   >€100M:         >3M visite — solo pochi player (Zalando, Unieuro, ecc.)
+
+Google Shopping attivo = investimento pubblicitario = volume minimo €500K+/anno.
 
 REGOLE CRITICHE:
 1. IGNORA il conteggio SKU come indicatore di volume: un pet shop può avere 10.000 SKU (taglie, gusti, marche) e fare solo €1-5M

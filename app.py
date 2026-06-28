@@ -982,8 +982,23 @@ if st.session_state.analisi_dati:
         kpi_lbl     = "font-size:0.65rem;color:#9a9b9c;text-transform:uppercase;letter-spacing:0.07em;margin-top:0.3rem;"
         kpi_style   = "font-size:1.25rem;font-weight:700;color:#1d4ed8;line-height:1.2;"
 
-        # Riga extra: fatturato + SKU (se disponibili)
+        # Riga extra: Google Reviews + Shopping + fatturato + SKU
         extra_row = ""
+        if stima.get("recensioni_google"):
+            g_rec = stima["recensioni_google"]
+            g_sc  = stima.get("score_google") or 0
+            extra_row += (
+                f'<div><div style="{kpi_style}">{"⭐" * round(g_sc)} {g_sc:.1f}</div>'
+                f'<div style="{kpi_lbl}">Google Reviews<br>'
+                f'<span style="color:#c0c2c4;font-size:0.60rem;">{g_rec:,} recensioni</span></div></div>'
+            )
+        if stima.get("google_shopping"):
+            extra_row += (
+                f'<div><div style="{kpi_style}" title="{stima.get("google_shopping_note","")}">'
+                f'✓ Attivo</div>'
+                f'<div style="{kpi_lbl}">Google Shopping<br>'
+                f'<span style="color:#c0c2c4;font-size:0.60rem;">investe in ads</span></div></div>'
+            )
         if stima.get("fatturato_totale"):
             fat_fmt = _fmt_eur(stima["fatturato_totale"])
             fat_src = stima.get("fonte_fatturato") or ""
