@@ -21,11 +21,13 @@ from auth import (verifica_credenziali, registra_utente,
                   genera_url_pagamento, conferma_pagamento,
                   PACCHETTI_CREDITI)
 
-# Rende la chiave Groq disponibile a prospect.py tramite env var
+# Carica tutte le chiavi da Streamlit secrets nell'env
 try:
-    _groq_key = st.secrets.get("GROQ_API_KEY", "")
-    if _groq_key:
-        os.environ["GROQ_API_KEY"] = _groq_key
+    for _k in ["GROQ_API_KEY", "SUPABASE_URL", "SUPABASE_KEY",
+               "APP_SECRET", "XPAY_ALIAS", "XPAY_SECRET", "XPAY_SANDBOX"]:
+        _v = st.secrets.get(_k, "")
+        if _v:
+            os.environ[_k] = _v
 except Exception:
     pass
 
@@ -641,7 +643,7 @@ st.markdown("""
 _user = st.session_state.user
 
 if _user:
-    # Utente loggato: mostra crediti e pulsante logout
+    # ── Utente loggato ────────────────────────────────────────
     _crediti = _user.get("credits", 0)
     _col_usr, _col_out = st.columns([6, 1])
     with _col_usr:
@@ -658,7 +660,7 @@ if _user:
             st.session_state.user = None
             st.rerun()
 
-    # Modale acquisto crediti
+    # Pannello acquisto crediti
     if st.query_params.get("auth") == "buy":
         st.query_params.clear()
         st.session_state.auth_tab = "buy"
@@ -686,27 +688,14 @@ if _user:
                 st.rerun()
 
 else:
-    # Utente non loggato: form login / registrazione
-    _tab = st.session_state.auth_tab
-    _c1, _c2, _c3 = st.columns([3, 2, 2])
-    with _c2:
-        if st.button("Accedi", use_container_width=True,
-                     type=("primary" if _tab == "login" else "secondary")):
-            st.session_state.auth_tab = "login"
-            st.rerun()
-    with _c3:
-        if st.button("Registrati", use_container_width=True,
-                     type=("primary" if _tab == "register" else "secondary")):
-            st.session_state.auth_tab = "register"
-            st.rerun()
+    # ── Utente non loggato: tabs Accedi / Registrati ──────────
+    _tab_login, _tab_reg = st.tabs(["Accedi", "Registrati"])
 
-    if _tab == "login":
+    with _tab_login:
         with st.form("form_login", clear_on_submit=False):
-            _uname = st.text_input("Username")
-            _pwd   = st.text_input("Password", type="password")
-            _sub   = st.form_submit_button("Accedi →", type="primary",
-                                           use_container_width=True)
-            if _sub:
+            _uname = st.text_input("Username", key="li_user")
+            _pwd   = st.text_input("Password", type="password", key="li_pwd")
+            if st.form_submit_button("Accedi →", use_container_width=True):
                 _u = verifica_credenziali(_uname, _pwd)
                 if _u:
                     _u["credits"] = get_crediti(_u["id"])
@@ -716,14 +705,12 @@ else:
                 else:
                     st.error("Credenziali non valide.")
 
-    elif _tab == "register":
+    with _tab_reg:
         with st.form("form_register", clear_on_submit=False):
-            _uname = st.text_input("Username")
-            _email = st.text_input("Email")
-            _pwd   = st.text_input("Password", type="password")
-            _sub   = st.form_submit_button("Crea account →", type="primary",
-                                           use_container_width=True)
-            if _sub:
+            _uname = st.text_input("Username", key="rg_user")
+            _email = st.text_input("Email",    key="rg_email")
+            _pwd   = st.text_input("Password", type="password", key="rg_pwd")
+            if st.form_submit_button("Crea account →", use_container_width=True):
                 ok, result = registra_utente(_uname, _email, _pwd)
                 if ok:
                     result["credits"] = 3
