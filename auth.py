@@ -189,10 +189,9 @@ def genera_form_pagamento(user_id: str, pacchetto_idx: int, return_url: str) -> 
     importo   = str(pkg["centesimi"])
     divisa    = "978"
     base_ret  = return_url.rstrip("/")
-    ok_url    = base_ret
-    ko_url    = base_ret
+    ok_url = base_ret
 
-    mac = _xpay_mac_request(alias, importo, divisa, cod_trans, ok_url, ko_url, secret)
+    mac = _xpay_mac_request(alias, importo, divisa, cod_trans, ok_url, "", secret)
 
     if _sb_ok():
         try:
@@ -221,7 +220,6 @@ def genera_form_pagamento(user_id: str, pacchetto_idx: int, return_url: str) -> 
         "divisa":    divisa,
         "codTrans":  cod_trans,
         "url":       ok_url,
-        "urlpost":   ko_url,
         "mac":       mac,
         "languageId": "ITA",
     }
