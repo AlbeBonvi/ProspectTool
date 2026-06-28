@@ -740,32 +740,28 @@ if _user:
             _app_url = "https://merchant-intelligence.streamlit.app"
             for idx, pkg in enumerate(PACCHETTI_CREDITI):
                 _costo_per_credito = pkg["centesimi"] / 100 / pkg["crediti"]
-                _badge = ""
-                if pkg["crediti"] >= 100:
-                    _badge = ' <span style="background:#48d597;color:#0f172a;border-radius:4px;padding:1px 6px;font-size:0.70rem;font-weight:700;">CONVENIENTE</span>'
-                if _xpay_configurato:
-                    _xpay_url = genera_url_pagamento(_user["id"], idx, _app_url)
+                _conveniente = pkg["crediti"] >= 100
+                _col_a, _col_b = st.columns([3, 1])
+                with _col_a:
+                    _label_txt = f"**{pkg['label']}**"
+                    if _conveniente:
+                        _label_txt += " 🟢 CONVENIENTE"
                     st.markdown(
-                        f'<div style="display:flex;align-items:center;justify-content:space-between;'
-                        f'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);'
-                        f'border-radius:8px;padding:10px 16px;margin:6px 0;">'
-                        f'<div style="color:#fff;font-weight:600;">{pkg["label"]}{_badge}'
-                        f'<span style="color:rgba(255,255,255,0.45);font-size:0.75rem;font-weight:400;'
-                        f'margin-left:8px;">({_costo_per_credito:.2f}€/ricerca)</span></div>'
-                        f'<a href="{_xpay_url}" target="_self" style="background:#1d4ed8;color:#fff;'
-                        f'border-radius:6px;padding:6px 18px;text-decoration:none;font-weight:700;'
-                        f'font-size:0.88rem;white-space:nowrap;">{pkg["prezzo"]} →</a></div>',
+                        f'{_label_txt}<br>'
+                        f'<span style="color:rgba(255,255,255,0.50);font-size:0.75rem;">'
+                        f'{_costo_per_credito:.2f}€/ricerca</span>',
                         unsafe_allow_html=True,
                     )
-                else:
-                    st.markdown(
-                        f'<div style="display:flex;align-items:center;justify-content:space-between;'
-                        f'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);'
-                        f'border-radius:8px;padding:10px 16px;margin:6px 0;">'
-                        f'<div style="color:#fff;font-weight:600;">{pkg["label"]}{_badge}</div>'
-                        f'<span style="color:rgba(255,255,255,0.45);font-size:0.82rem;">{pkg["prezzo"]}</span></div>',
-                        unsafe_allow_html=True,
-                    )
+                with _col_b:
+                    if _xpay_configurato:
+                        _xpay_url = genera_url_pagamento(_user["id"], idx, _app_url)
+                        st.link_button(pkg["prezzo"], _xpay_url, use_container_width=True)
+                    else:
+                        st.markdown(
+                            f'<span style="color:rgba(255,255,255,0.50);">{pkg["prezzo"]}</span>',
+                            unsafe_allow_html=True,
+                        )
+                st.divider()
             if not _xpay_configurato:
                 st.warning("Pagamento non ancora attivo — configura XPAY_ALIAS e XPAY_SECRET nei secrets.")
             if st.button("Chiudi", key="btn_close_buy"):
