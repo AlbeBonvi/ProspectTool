@@ -187,7 +187,7 @@ def genera_form_pagamento(user_id: str, pacchetto_idx: int, return_url: str) -> 
     pkg       = PACCHETTI_CREDITI[pacchetto_idx]
     cod_trans = f"MI{user_id[:6].upper()}{int(time.time())}"[:30]
     importo   = str(pkg["centesimi"])
-    divisa    = "978"
+    divisa    = "EUR"
     base_ret  = return_url.rstrip("/")
     ok_url = f"{base_ret}?xpay_ok=1"
     ko_url = f"{base_ret}?xpay_ko=1"
@@ -221,7 +221,7 @@ def genera_form_pagamento(user_id: str, pacchetto_idx: int, return_url: str) -> 
         "divisa":    divisa,
         "codTrans":  cod_trans,
         "url":       quote(ok_url, safe=''),
-        "urlpost":   quote(ko_url, safe=''),
+        "url_back":  quote(ko_url, safe=''),
         "mac":       mac,
         "languageId": "ITA",
     }
