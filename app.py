@@ -713,25 +713,24 @@ _user = st.session_state.user
 if _user:
     # ── Utente loggato ────────────────────────────────────────
     _crediti = _user.get("credits", 0)
-    _col_usr, _col_out = st.columns([6, 1])
+    _col_usr, _col_ricarica, _col_out = st.columns([5, 1.2, 1])
     with _col_usr:
         st.markdown(
-            f'<div style="text-align:right;font-size:0.80rem;color:rgba(255,255,255,0.70);">'
+            f'<div style="text-align:right;font-size:0.80rem;color:rgba(255,255,255,0.70);'
+            f'padding-top:0.45rem;">'
             f'👤 <b>{_user["username"]}</b> &nbsp;|&nbsp; '
-            f'<span style="color:#0891b2;font-weight:700;">🔵 {_crediti} crediti</span>'
-            f' &nbsp;|&nbsp; <a href="?auth=buy" style="color:#0891b2;text-decoration:none;'
-            f'font-size:0.76rem;">Ricarica →</a></div>',
+            f'<span style="color:#0891b2;font-weight:700;">🔵 {_crediti} crediti</span></div>',
             unsafe_allow_html=True,
         )
+    with _col_ricarica:
+        if st.button("💳 Ricarica", key="btn_ricarica", use_container_width=True):
+            st.session_state.auth_tab = "buy"
+            st.rerun()
     with _col_out:
-        if st.button("Esci", key="btn_logout"):
+        if st.button("Esci", key="btn_logout", use_container_width=True):
             st.session_state.user = None
             st.rerun()
 
-    # Pannello acquisto crediti
-    if st.query_params.get("auth") == "buy":
-        st.query_params.clear()
-        st.session_state.auth_tab = "buy"
     if st.session_state.auth_tab == "buy":
         with st.expander("💳 Acquista crediti", expanded=True):
             st.markdown("Ogni ricerca consuma **1 credito**. Scegli il pacchetto:")
