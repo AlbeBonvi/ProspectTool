@@ -671,12 +671,12 @@ if "analizzando_step" not in st.session_state:
 # ── Gestione return da XPay ───────────────────────────────────
 _params = st.query_params
 if _params.get("xpay_ok") == "1" and st.session_state.user:
-    _cod = _params.get("cod", "")
+    _cod = _params.get("codTrans", "")   # XPay manda "codTrans" nel return
     if _cod and conferma_pagamento(
         cod_trans   = _cod,
         esito       = _params.get("esito", "OK"),
         importo     = _params.get("importo", ""),
-        divisa      = _params.get("divisa", "EUR"),
+        divisa      = _params.get("divisa", "978"),
         data        = _params.get("data", ""),
         orario      = _params.get("orario", ""),
         mac_ricevuto= _params.get("mac", ""),
