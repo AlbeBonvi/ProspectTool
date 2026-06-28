@@ -167,8 +167,8 @@ XPAY_LIVE_URL    = "https://ecommerce.nexi.it/ecomm/ecomm/DispatcherServlet"
 
 
 def _xpay_mac_request(alias, importo, divisa, cod_trans, url, urlpost, secret):
-    """MAC richiesta HPP: SHA1(alias+importo+divisa+codTrans+url+urlpost+secret)"""
-    raw = alias + importo + divisa + cod_trans + url + urlpost + secret
+    """MAC richiesta HPP: SHA1(codTrans=<v>divisa=<v>importo=<v><secret>)"""
+    raw = f"codTrans={cod_trans}divisa={divisa}importo={importo}{secret}"
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()
 
 
