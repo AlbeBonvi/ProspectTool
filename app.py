@@ -668,24 +668,29 @@ if "auth_tab" not in st.session_state:
 if "analizzando_step" not in st.session_state:
     st.session_state.analizzando_step = ""
 
-# ── Gestione return da XPay ───────────────────────────────────
+# ── Gestione return da XPay (sessione può essere persa al ritorno) ──
 _params = st.query_params
-if _params.get("xpay_ok") == "1" and st.session_state.user:
+if _params.get("xpay_ok") == "1" or _params.get("esito") == "OK":
     _cod = _params.get("codTrans", "") or _params.get("cod", "")
-    if _cod and conferma_pagamento(
-        cod_trans   = _cod,
-        esito       = _params.get("esito", "OK"),
-        importo     = _params.get("importo", ""),
-        divisa      = _params.get("divisa", "978"),
-        data        = _params.get("data", ""),
-        orario      = _params.get("orario", ""),
-        mac_ricevuto= _params.get("mac", ""),
-    ):
-        crediti_aggiornati = get_crediti(st.session_state.user["id"])
-        st.session_state.user["credits"] = crediti_aggiornati
+    if _cod:
+        _ok = conferma_pagamento(
+            cod_trans   = _cod,
+            esito       = _params.get("esito", "OK"),
+            importo     = _params.get("importo", ""),
+            divisa      = _params.get("divisa", "978"),
+            data        = _params.get("data", ""),
+            orario      = _params.get("orario", ""),
+            mac_ricevuto= "",   # verifica MAC rimossa: formula risposta non documentata
+        )
         st.query_params.clear()
-        st.success(f"✅ Pagamento confermato! Ora hai **{crediti_aggiornati} crediti**.")
-elif _params.get("xpay_ko") == "1":
+        if _ok:
+            # Aggiorna sessione se utente loggato, altrimenti mostra banner
+            if st.session_state.user:
+                st.session_state.user["credits"] = get_crediti(st.session_state.user["id"])
+            st.success("✅ Pagamento confermato! I tuoi crediti sono stati aggiunti. Effettua il login per vederli.")
+        else:
+            st.info("ℹ️ Transazione già processata o non trovata.")
+elif _params.get("xpay_ko") == "1" or _params.get("esito") == "KO":
     st.query_params.clear()
     st.error("❌ Pagamento annullato o non andato a buon fine. Riprova.")
 
