@@ -8,7 +8,7 @@ Stack:
 
 Schema SQL Supabase (da eseguire una volta nel pannello SQL):
 
-    create table users (
+    create table mi_users (
         id uuid default uuid_generate_v4() primary key,
         username text unique not null,
         email text unique not null,
@@ -18,9 +18,9 @@ Schema SQL Supabase (da eseguire una volta nel pannello SQL):
         created_at timestamptz default now()
     );
 
-    create table transactions (
+    create table mi_transactions (
         id uuid default uuid_generate_v4() primary key,
-        user_id uuid references users(id),
+        user_id uuid references mi_users(id),
         credits_added integer not null,
         amount_eur numeric(10,2) not null,
         xpay_order_id text unique,
@@ -62,7 +62,7 @@ def test_connessione() -> str:
     if not sb:
         return "❌ Impossibile creare il client Supabase (libreria mancante?)"
     try:
-        sb.table("users").select("id").limit(1).execute()
+        sb.table("mi_users").select("id").limit(1).execute()
         return "✅ Connessione Supabase OK"
     except Exception as e:
         return f"❌ Errore query: {e}"
@@ -82,7 +82,7 @@ def verifica_credenziali(username: str, password: str):
     if not sb:
         return None
     try:
-        res = sb.table("users").select("*").eq("username", username.strip()).execute()
+        res = sb.table("mi_users").select("*").eq("username", username.strip()).execute()
         if not res.data:
             return None
         user = res.data[0]
@@ -102,7 +102,7 @@ def registra_utente(username: str, email: str, password: str):
     if not sb:
         return False, "Database non raggiungibile."
     try:
-        res = sb.table("users").insert({
+        res = sb.table("mi_users").insert({
             "username":      username.strip(),
             "email":         email.strip().lower(),
             "password_hash": _hash_pwd(password),
@@ -122,7 +122,7 @@ def get_crediti(user_id: str) -> int:
     if not sb:
         return 0
     try:
-        res = sb.table("users").select("credits").eq("id", user_id).execute()
+        res = sb.table("mi_users").select("credits").eq("id", user_id).execute()
         return res.data[0]["credits"] if res.data else 0
     except Exception:
         return 0
@@ -138,14 +138,14 @@ def scala_credito(user_id: str) -> bool:
         return False
     try:
         # Legge il saldo corrente
-        res = sb.table("users").select("credits").eq("id", user_id).execute()
+        res = sb.table("mi_users").select("credits").eq("id", user_id).execute()
         if not res.data:
             return False
         saldo = res.data[0]["credits"]
         if saldo <= 0:
             return False
         # Scala atomicamente
-        sb.table("users").update({"credits": saldo - 1}).eq("id", user_id).execute()
+        sb.table("mi_users").update({"credits": saldo - 1}).eq("id", user_id).execute()
         return True
     except Exception:
         return False
@@ -188,7 +188,7 @@ def genera_url_pagamento(user_id: str, pacchetto_idx: int, return_url: str) -> s
     sb = _get_supabase()
     if sb:
         try:
-            sb.table("transactions").insert({
+            sb.table("mi_transactions").insert({
                 "user_id":       user_id,
                 "credits_added": pacchetto["crediti"],
                 "amount_eur":    float(pacchetto["eur"]),
@@ -225,7 +225,7 @@ def conferma_pagamento(cod_trans: str) -> bool:
     if not sb:
         return False
     try:
-        res = sb.table("transactions") \
+        res = sb.table("mi_transactions") \
                 .select("*") \
                 .eq("xpay_order_id", cod_trans) \
                 .eq("status", "pending") \
@@ -235,13 +235,13 @@ def conferma_pagamento(cod_trans: str) -> bool:
         tx = res.data[0]
 
         # Aggiorna stato
-        sb.table("transactions").update({"status": "completed"}) \
+        sb.table("mi_transactions").update({"status": "completed"}) \
           .eq("id", tx["id"]).execute()
 
         # Accredita crediti
-        cur = sb.table("users").select("credits").eq("id", tx["user_id"]).execute()
+        cur = sb.table("mi_users").select("credits").eq("id", tx["user_id"]).execute()
         saldo = cur.data[0]["credits"] if cur.data else 0
-        sb.table("users").update({"credits": saldo + tx["credits_added"]}) \
+        sb.table("mi_users").update({"credits": saldo + tx["credits_added"]}) \
           .eq("id", tx["user_id"]).execute()
 
         return True
