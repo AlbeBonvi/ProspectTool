@@ -16,6 +16,10 @@ from prospect import (valida_piva, verifica_piva, cerca_pec,
                       analizza_sito, cerca_news, cerca_portfolio_agenzia,
                       stima_volumi_ai, genera_suggerimenti_pitch,
                       analisi_ai_merchant)
+from auth import (verifica_credenziali, registra_utente,
+                  get_crediti, scala_credito,
+                  genera_url_pagamento, conferma_pagamento,
+                  PACCHETTI_CREDITI)
 
 # Rende la chiave Groq disponibile a prospect.py tramite env var
 try:
@@ -440,6 +444,83 @@ st.markdown("""
   }
   .nexi-footer a { color: #0891b2; text-decoration: none; }
 
+  /* ══════════════════════════════════════════════
+     LENTE ANIMATA — appare durante l'analisi
+     ══════════════════════════════════════════════ */
+  @keyframes lens-scan {
+    0%   { transform: translate(0px,   0px)  rotate(-8deg)  scale(1.00); }
+    15%  { transform: translate(14px, -10px) rotate(18deg)  scale(1.12); }
+    30%  { transform: translate(-6px,  16px) rotate(-14deg) scale(0.92); }
+    45%  { transform: translate(18px,   6px) rotate(22deg)  scale(1.08); }
+    60%  { transform: translate(-10px, -8px) rotate(-5deg)  scale(0.96); }
+    75%  { transform: translate(8px,   14px) rotate(16deg)  scale(1.04); }
+    90%  { transform: translate(-14px,  4px) rotate(-18deg) scale(0.94); }
+    100% { transform: translate(0px,   0px)  rotate(-8deg)  scale(1.00); }
+  }
+  @keyframes dots {
+    0%   { content: ""; }
+    25%  { content: "."; }
+    50%  { content: ".."; }
+    75%  { content: "..."; }
+    100% { content: ""; }
+  }
+  .lens-wrap {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 12px;
+    padding: 18px 28px;
+    margin: 1.2rem 0;
+  }
+  .lens-icon {
+    font-size: 2.4rem;
+    display: inline-block;
+    animation: lens-scan 2.4s ease-in-out infinite;
+    filter: drop-shadow(0 0 8px rgba(8,145,178,0.55));
+  }
+  .lens-text {
+    color: rgba(255,255,255,0.88);
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 1.05rem;
+    font-weight: 500;
+  }
+  .lens-step {
+    color: rgba(255,255,255,0.50);
+    font-size: 0.78rem;
+    margin-top: 3px;
+    font-style: italic;
+  }
+
+  /* ══════════════════════════════════════════════
+     PANNELLO AUTH top-right
+     ══════════════════════════════════════════════ */
+  .auth-bar {
+    position: fixed;
+    top: 0.55rem;
+    right: 1.2rem;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+  }
+  .auth-credits {
+    background: rgba(8,145,178,0.22);
+    border: 1px solid #0891b2;
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.03em;
+  }
+  .auth-user {
+    font-size: 0.78rem;
+    color: rgba(255,255,255,0.75);
+  }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -530,6 +611,107 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# ──────────────────────────────────────────────────────────────
+# PANNELLO AUTH — top right
+# ──────────────────────────────────────────────────────────────
+_user = st.session_state.user
+
+if _user:
+    # Utente loggato: mostra crediti e pulsante logout
+    _crediti = _user.get("credits", 0)
+    _col_usr, _col_out = st.columns([6, 1])
+    with _col_usr:
+        st.markdown(
+            f'<div style="text-align:right;font-size:0.80rem;color:rgba(255,255,255,0.70);">'
+            f'👤 <b>{_user["username"]}</b> &nbsp;|&nbsp; '
+            f'<span style="color:#0891b2;font-weight:700;">🔵 {_crediti} crediti</span>'
+            f' &nbsp;|&nbsp; <a href="?auth=buy" style="color:#0891b2;text-decoration:none;'
+            f'font-size:0.76rem;">Ricarica →</a></div>',
+            unsafe_allow_html=True,
+        )
+    with _col_out:
+        if st.button("Esci", key="btn_logout"):
+            st.session_state.user = None
+            st.rerun()
+
+    # Modale acquisto crediti
+    if st.query_params.get("auth") == "buy":
+        st.query_params.clear()
+        st.session_state.auth_tab = "buy"
+    if st.session_state.auth_tab == "buy":
+        with st.expander("💳 Acquista crediti", expanded=True):
+            st.markdown("Ogni ricerca consuma **1 credito**. Scegli il pacchetto:")
+            for idx, pkg in enumerate(PACCHETTI_CREDITI):
+                _xpay_url = genera_url_pagamento(
+                    _user["id"], idx,
+                    return_url="https://merchant-intelligence.streamlit.app",
+                )
+                if _xpay_url:
+                    st.markdown(
+                        f'<a href="{_xpay_url}" target="_self" style="display:inline-block;'
+                        f'background:#1d4ed8;color:#fff;border-radius:6px;padding:8px 20px;'
+                        f'text-decoration:none;font-weight:600;margin:4px 0;">'
+                        f'💳 {pkg["label"]}</a>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.warning("XPay non configurato. Contatta l'amministratore.")
+                    break
+            if st.button("Chiudi", key="btn_close_buy"):
+                st.session_state.auth_tab = ""
+                st.rerun()
+
+else:
+    # Utente non loggato: form login / registrazione
+    _tab = st.session_state.auth_tab
+    _c1, _c2, _c3 = st.columns([3, 2, 2])
+    with _c2:
+        if st.button("Accedi", use_container_width=True,
+                     type=("primary" if _tab == "login" else "secondary")):
+            st.session_state.auth_tab = "login"
+            st.rerun()
+    with _c3:
+        if st.button("Registrati", use_container_width=True,
+                     type=("primary" if _tab == "register" else "secondary")):
+            st.session_state.auth_tab = "register"
+            st.rerun()
+
+    if _tab == "login":
+        with st.form("form_login", clear_on_submit=False):
+            _uname = st.text_input("Username")
+            _pwd   = st.text_input("Password", type="password")
+            _sub   = st.form_submit_button("Accedi →", type="primary",
+                                           use_container_width=True)
+            if _sub:
+                _u = verifica_credenziali(_uname, _pwd)
+                if _u:
+                    _u["credits"] = get_crediti(_u["id"])
+                    st.session_state.user = _u
+                    st.session_state.auth_tab = ""
+                    st.rerun()
+                else:
+                    st.error("Credenziali non valide.")
+
+    elif _tab == "register":
+        with st.form("form_register", clear_on_submit=False):
+            _uname = st.text_input("Username")
+            _email = st.text_input("Email")
+            _pwd   = st.text_input("Password", type="password")
+            _sub   = st.form_submit_button("Crea account →", type="primary",
+                                           use_container_width=True)
+            if _sub:
+                ok, result = registra_utente(_uname, _email, _pwd)
+                if ok:
+                    result["credits"] = 3
+                    st.session_state.user = result
+                    st.session_state.auth_tab = ""
+                    st.success("Account creato! Hai ricevuto 3 crediti di benvenuto.")
+                    st.rerun()
+                else:
+                    st.error(result)
+
+    st.divider()
+
 
 # ──────────────────────────────────────────────────────────────
 # SESSION STATE
@@ -538,6 +720,22 @@ if "analisi_dati" not in st.session_state:
     st.session_state.analisi_dati = None
 if "portfolio_agenzia" not in st.session_state:
     st.session_state.portfolio_agenzia = None
+if "user" not in st.session_state:
+    st.session_state.user = None          # dict utente loggato
+if "auth_tab" not in st.session_state:
+    st.session_state.auth_tab = "login"   # "login" | "register" | "buy"
+if "analizzando_step" not in st.session_state:
+    st.session_state.analizzando_step = ""
+
+# ── Gestione return da XPay ────────────────────────────────────
+_params = st.query_params
+if _params.get("xpay_ok") == "1" and st.session_state.user:
+    _cod = _params.get("cod", "")
+    if _cod and conferma_pagamento(_cod):
+        crediti_aggiornati = get_crediti(st.session_state.user["id"])
+        st.session_state.user["credits"] = crediti_aggiornati
+        st.query_params.clear()
+        st.success(f"✅ Pagamento confermato! Ora hai **{crediti_aggiornati} crediti**.")
 
 # ──────────────────────────────────────────────────────────────
 # FORM DI INPUT
@@ -583,6 +781,36 @@ if avvia:
         st.error(f"Partita IVA non valida: {motivo}")
         st.stop()
 
+    # ── Controllo crediti ─────────────────────────────────────
+    _u = st.session_state.get("user")
+    if _u is not None:
+        _saldo = get_crediti(_u["id"])
+        st.session_state.user["credits"] = _saldo
+        if _saldo <= 0:
+            st.warning("⚠️ Hai esaurito i crediti. Ricarica per continuare.")
+            st.markdown(
+                '<a href="?auth=buy" style="display:inline-block;background:#1d4ed8;'
+                'color:#fff;border-radius:6px;padding:8px 20px;text-decoration:none;'
+                'font-weight:600;">💳 Acquista crediti</a>',
+                unsafe_allow_html=True,
+            )
+            st.stop()
+
+    # ── Lente animata ─────────────────────────────────────────
+    _lens_slot = st.empty()
+
+    def _aggiorna_lente(step: str):
+        _lens_slot.markdown(
+            f'<div class="lens-wrap">'
+            f'  <span class="lens-icon">🔍</span>'
+            f'  <div><div class="lens-text">Analisi in corso…</div>'
+            f'      <div class="lens-step">{step}</div></div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    _aggiorna_lente("Verifica Partita IVA…")
+
     ragione_sociale = ""
     stato           = ""
     indirizzo       = ""
@@ -592,6 +820,7 @@ if avvia:
     analisi         = None
     notizie         = []
 
+    _aggiorna_lente("Interrogo il registro VIES — Agenzia delle Entrate…")
     with st.spinner("Interrogo il registro VIES — Agenzia delle Entrate…"):
         try:
             ragione_sociale, stato, indirizzo = verifica_piva(piva)
@@ -602,6 +831,7 @@ if avvia:
         except Exception as e:
             errore_vies = str(e)
 
+    _aggiorna_lente("Ricerca PEC nel registro INI-PEC…")
     with st.spinner("Ricerca PEC nel registro INI-PEC…"):
         try:
             pec = cerca_pec(piva)
@@ -614,9 +844,11 @@ if avvia:
 
     url_pulito = url_input.strip()
     if url_pulito:
+        _aggiorna_lente(f"Scansione sito {url_pulito}…")
         with st.spinner(f"Analizzo il sito {url_pulito}…"):
             analisi = analizza_sito(url_pulito)
 
+    _aggiorna_lente("Cerco notizie recenti sul merchant…")
     with st.spinner("Cerco le ultime notizie sul merchant…"):
         notizie = cerca_news(ragione_sociale, dominio_sito=url_pulito)
 
@@ -624,6 +856,7 @@ if avvia:
     stima = None
     html_home_cache = None
     if url_pulito and analisi and analisi.get("raggiungibile"):
+        _aggiorna_lente("Stima AI del transato (Llama 3.3 70B)…")
         with st.spinner("Stimo i volumi di transato (AI)…"):
             try:
                 stima = stima_volumi_ai(url_pulito, analisi,
@@ -642,12 +875,24 @@ if avvia:
     # ── Analisi AI pre-call ──
     ai_analisi = None
     if url_pulito and analisi and analisi.get("raggiungibile"):
+        _aggiorna_lente("Elaboro la scheda AI pre-call…")
         with st.spinner("Elaboro la scheda AI pre-call…"):
             try:
                 ai_analisi = analisi_ai_merchant(
                     ragione_sociale, url_pulito, analisi, stima, notizie)
             except Exception:
                 ai_analisi = None
+
+    # ── Scala 1 credito (solo se utente loggato) ──────────────
+    if st.session_state.get("user"):
+        _ok = scala_credito(st.session_state.user["id"])
+        if _ok:
+            st.session_state.user["credits"] = max(
+                0, st.session_state.user.get("credits", 1) - 1
+            )
+
+    # ── Chiudi lente ──────────────────────────────────────────
+    _lens_slot.empty()
 
     # ── Salva subito analisi — così i risultati appaiono anche se il portfolio fallisce ──
     st.session_state.analisi_dati = {
