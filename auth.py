@@ -177,7 +177,8 @@ def _xpay_mac_response(esito, cod_trans, importo, divisa, data, orario, secret):
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()
 
 
-def genera_url_pagamento(user_id: str, pacchetto_idx: int, return_url: str):
+def genera_form_pagamento(user_id: str, pacchetto_idx: int, return_url: str) -> dict | None:
+    """Restituisce un dict con tutti i parametri per il form POST XPay HPP."""
     alias  = os.environ.get("XPAY_ALIAS", "").strip()
     secret = os.environ.get("XPAY_SECRET", "").strip()
     if not alias or not secret:
@@ -185,10 +186,9 @@ def genera_url_pagamento(user_id: str, pacchetto_idx: int, return_url: str):
 
     pkg       = PACCHETTI_CREDITI[pacchetto_idx]
     cod_trans = f"MI{user_id[:6].upper()}{int(time.time())}"[:30]
-    importo   = str(pkg["centesimi"])   # centesimi interi: €2,00 → "200"
-    divisa    = "978"                   # XPay HPP: codice ISO 4217 numerico (EUR = 978)
+    importo   = str(pkg["centesimi"])
+    divisa    = "978"
     base_ret  = return_url.rstrip("/")
-    # URL puliti senza query params — XPay aggiunge esito=OK/KO e codTrans
     ok_url    = base_ret
     ko_url    = base_ret
 
@@ -212,14 +212,28 @@ def genera_url_pagamento(user_id: str, pacchetto_idx: int, return_url: str):
             pass
 
     sandbox = os.environ.get("XPAY_SANDBOX", "true").lower() == "true"
-    base    = XPAY_SANDBOX_URL if sandbox else XPAY_LIVE_URL
-    # url e urlpost passati non-encoded (non contengono & o ?)
-    params  = (f"alias={alias}&importo={importo}&divisa={divisa}"
-               f"&codTrans={cod_trans}"
-               f"&url={ok_url}"
-               f"&urlpost={ko_url}"
-               f"&mac={mac}&languageId=ITA")
-    return f"{base}?{params}"
+    action  = XPAY_SANDBOX_URL if sandbox else XPAY_LIVE_URL
+
+    return {
+        "action":    action,
+        "alias":     alias,
+        "importo":   importo,
+        "divisa":    divisa,
+        "codTrans":  cod_trans,
+        "url":       ok_url,
+        "urlpost":   ko_url,
+        "mac":       mac,
+        "languageId": "ITA",
+    }
+
+
+def genera_url_pagamento(user_id: str, pacchetto_idx: int, return_url: str):
+    """Compatibilità — genera URL GET (usato solo per debug)."""
+    d = genera_form_pagamento(user_id, pacchetto_idx, return_url)
+    if not d:
+        return None
+    p = "&".join(f"{k}={v}" for k, v in d.items() if k != "action")
+    return f"{d['action']}?{p}"
 
 
 def conferma_pagamento(cod_trans: str, esito: str = "OK",
