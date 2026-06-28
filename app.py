@@ -19,7 +19,7 @@ from prospect import (valida_piva, verifica_piva, cerca_pec,
 from auth import (verifica_credenziali, registra_utente,
                   get_crediti, scala_credito,
                   genera_url_pagamento, conferma_pagamento,
-                  PACCHETTI_CREDITI)
+                  PACCHETTI_CREDITI, test_connessione)
 
 # Carica tutte le chiavi da Streamlit secrets nell'env
 try:
@@ -777,6 +777,7 @@ else:
                     st.rerun()
                 else:
                     st.error(result)
+                    st.caption(test_connessione())
 
     st.divider()
 

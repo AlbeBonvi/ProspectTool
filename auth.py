@@ -44,8 +44,28 @@ def _get_supabase():
         if not url or not key:
             return None
         return create_client(url, key)
+    except ImportError:
+        return None
     except Exception:
         return None
+
+
+def test_connessione() -> str:
+    """Ritorna stringa diagnostica sullo stato della connessione."""
+    url = os.environ.get("SUPABASE_URL", "")
+    key = os.environ.get("SUPABASE_KEY", "")
+    if not url:
+        return "❌ SUPABASE_URL mancante nei secrets"
+    if not key:
+        return "❌ SUPABASE_KEY mancante nei secrets"
+    sb = _get_supabase()
+    if not sb:
+        return "❌ Impossibile creare il client Supabase (libreria mancante?)"
+    try:
+        sb.table("users").select("id").limit(1).execute()
+        return "✅ Connessione Supabase OK"
+    except Exception as e:
+        return f"❌ Errore query: {e}"
 
 
 # ── Password hashing (SHA-256 + salt via HMAC) ─────────────────
@@ -93,7 +113,7 @@ def registra_utente(username: str, email: str, password: str):
         msg = str(e)
         if "duplicate" in msg.lower() or "unique" in msg.lower():
             return False, "Username o email già registrati."
-        return False, "Errore durante la registrazione."
+        return False, f"Errore: {msg}"
 
 
 def get_crediti(user_id: str) -> int:
