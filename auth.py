@@ -186,7 +186,7 @@ def genera_url_pagamento(user_id: str, pacchetto_idx: int, return_url: str):
     pkg       = PACCHETTI_CREDITI[pacchetto_idx]
     cod_trans = f"MI{user_id[:6].upper()}{int(time.time())}"[:30]
     importo   = str(pkg["centesimi"])   # centesimi interi: €2,00 → "200"
-    divisa    = "EUR"
+    divisa    = "978"                   # XPay HPP: codice ISO 4217 numerico (EUR = 978)
     base_ret  = return_url.rstrip("/")
     ok_url    = f"{base_ret}?xpay_ok=1&cod={cod_trans}"
     ko_url    = f"{base_ret}?xpay_ko=1&cod={cod_trans}"
@@ -214,7 +214,7 @@ def genera_url_pagamento(user_id: str, pacchetto_idx: int, return_url: str):
     base    = XPAY_SANDBOX_URL if sandbox else XPAY_LIVE_URL
     params  = (f"alias={alias}&importo={importo}&divisa={divisa}"
                f"&codTrans={cod_trans}&url={ok_url}&urlpost={ko_url}"
-               f"&mac={mac}&languageId=ITA")
+               f"&mac={mac}&languageId=ITA&Note=MerchantIntelligence")
     return f"{base}?{params}"
 
 
