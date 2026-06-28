@@ -152,41 +152,56 @@ def test_connessione() -> str:
 # ── XPay HPP ───────────────────────────────────────────────────
 
 PACCHETTI_CREDITI = [
-    {"crediti": 10,  "eur": "9.90",  "label": "10 ricerche — €9,90"},
-    {"crediti": 30,  "eur": "24.90", "label": "30 ricerche — €24,90"},
-    {"crediti": 100, "eur": "69.90", "label": "100 ricerche — €69,90"},
+    {"crediti":   1, "centesimi":  200, "label":   "1 ricerca",   "prezzo": "€2,00"},
+    {"crediti":   5, "centesimi":  800, "label":   "5 ricerche",  "prezzo": "€8,00"},
+    {"crediti":  10, "centesimi": 1500, "label":  "10 ricerche",  "prezzo": "€15,00"},
+    {"crediti":  50, "centesimi": 4000, "label":  "50 ricerche",  "prezzo": "€40,00"},
+    {"crediti": 100, "centesimi": 6000, "label": "100 ricerche",  "prezzo": "€60,00"},
+    {"crediti": 250, "centesimi":10000, "label": "250 ricerche",  "prezzo": "€100,00"},
+    {"crediti": 500, "centesimi":15000, "label": "500 ricerche",  "prezzo": "€150,00"},
 ]
 
 XPAY_SANDBOX_URL = "https://int-ecommerce.nexi.it/ecomm/ecomm/DispatcherServlet"
 XPAY_LIVE_URL    = "https://ecommerce.nexi.it/ecomm/ecomm/DispatcherServlet"
 
 
-def _xpay_mac(fields: dict, secret: str) -> str:
-    ordered = ["alias", "importo", "divisa", "codTrans", "url", "urlpost"]
-    raw = "".join(f"{k}{fields[k]}" for k in ordered if k in fields)
-    raw += secret
+def _xpay_mac_request(alias, importo, divisa, cod_trans, url, urlpost, secret):
+    """MAC richiesta HPP: SHA1(alias+importo+divisa+codTrans+url+urlpost+secret)"""
+    raw = alias + importo + divisa + cod_trans + url + urlpost + secret
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()
+
+
+def _xpay_mac_response(esito, cod_trans, importo, divisa, data, orario, secret):
+    """MAC verifica return: SHA1(esito+codTrans+importo+divisa+data+orario+secret)"""
+    raw = esito + cod_trans + importo + divisa + data + orario + secret
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()
 
 
 def genera_url_pagamento(user_id: str, pacchetto_idx: int, return_url: str):
-    alias  = os.environ.get("XPAY_ALIAS", "")
-    secret = os.environ.get("XPAY_SECRET", "")
+    alias  = os.environ.get("XPAY_ALIAS", "").strip()
+    secret = os.environ.get("XPAY_SECRET", "").strip()
     if not alias or not secret:
         return None
 
     pkg       = PACCHETTI_CREDITI[pacchetto_idx]
-    cod_trans = f"MI-{user_id[:8]}-{int(time.time())}"
-    importo   = pkg["eur"].replace(".", "")
+    cod_trans = f"MI{user_id[:6].upper()}{int(time.time())}"[:30]
+    importo   = str(pkg["centesimi"])   # centesimi interi: €2,00 → "200"
+    divisa    = "EUR"
+    base_ret  = return_url.rstrip("/")
+    ok_url    = f"{base_ret}?xpay_ok=1&cod={cod_trans}"
+    ko_url    = f"{base_ret}?xpay_ko=1&cod={cod_trans}"
+
+    mac = _xpay_mac_request(alias, importo, divisa, cod_trans, ok_url, ko_url, secret)
 
     if _sb_ok():
         try:
             requests.post(
                 _sb_url("mi_transactions"),
-                headers=_sb_headers(),
+                headers=_sb_headers(write=True),
                 json={
                     "user_id":       user_id,
                     "credits_added": pkg["crediti"],
-                    "amount_eur":    float(pkg["eur"]),
+                    "amount_eur":    pkg["centesimi"] / 100,
                     "xpay_order_id": cod_trans,
                     "status":        "pending",
                 },
@@ -195,24 +210,31 @@ def genera_url_pagamento(user_id: str, pacchetto_idx: int, return_url: str):
         except Exception:
             pass
 
-    ok_url = return_url + f"?xpay_ok=1&cod={cod_trans}"
-    fields = {
-        "alias":    alias,
-        "importo":  importo,
-        "divisa":   "EUR",
-        "codTrans": cod_trans,
-        "url":      ok_url,
-        "urlpost":  ok_url,
-    }
-    mac  = _xpay_mac(fields, secret)
-    base = XPAY_SANDBOX_URL if os.environ.get("XPAY_SANDBOX", "true").lower() == "true" else XPAY_LIVE_URL
-    params = "&".join(f"{k}={v}" for k, v in fields.items())
-    return f"{base}?{params}&mac={mac}"
+    sandbox = os.environ.get("XPAY_SANDBOX", "true").lower() == "true"
+    base    = XPAY_SANDBOX_URL if sandbox else XPAY_LIVE_URL
+    params  = (f"alias={alias}&importo={importo}&divisa={divisa}"
+               f"&codTrans={cod_trans}&url={ok_url}&urlpost={ko_url}"
+               f"&mac={mac}&languageId=ITA")
+    return f"{base}?{params}"
 
 
-def conferma_pagamento(cod_trans: str) -> bool:
+def conferma_pagamento(cod_trans: str, esito: str = "OK",
+                       importo: str = "", divisa: str = "EUR",
+                       data: str = "", orario: str = "",
+                       mac_ricevuto: str = "") -> bool:
     if not _sb_ok():
         return False
+
+    # Verifica firma MAC se i parametri di ritorno sono presenti
+    if mac_ricevuto:
+        secret = os.environ.get("XPAY_SECRET", "").strip()
+        mac_atteso = _xpay_mac_response(esito, cod_trans, importo, divisa, data, orario, secret)
+        if not hmac.compare_digest(mac_atteso, mac_ricevuto.lower()):
+            return False
+
+    if esito != "OK":
+        return False
+
     try:
         r = requests.get(
             _sb_url("mi_transactions"),
@@ -220,23 +242,22 @@ def conferma_pagamento(cod_trans: str) -> bool:
             params={"xpay_order_id": f"eq.{cod_trans}", "status": "eq.pending", "select": "*"},
             timeout=8,
         )
-        data = r.json()
-        if not isinstance(data, list) or not data:
+        rows = r.json()
+        if not isinstance(rows, list) or not rows:
             return False
-        tx = data[0]
+        tx = rows[0]
 
         requests.patch(
             _sb_url("mi_transactions"),
-            headers=_sb_headers(),
+            headers=_sb_headers(write=True),
             params={"id": f"eq.{tx['id']}"},
             json={"status": "completed"},
             timeout=8,
         )
-
         saldo = get_crediti(tx["user_id"])
         requests.patch(
             _sb_url("mi_users"),
-            headers=_sb_headers(),
+            headers=_sb_headers(write=True),
             params={"id": f"eq.{tx['user_id']}"},
             json={"credits": saldo + tx["credits_added"]},
             timeout=8,

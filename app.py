@@ -672,11 +672,22 @@ if "analizzando_step" not in st.session_state:
 _params = st.query_params
 if _params.get("xpay_ok") == "1" and st.session_state.user:
     _cod = _params.get("cod", "")
-    if _cod and conferma_pagamento(_cod):
+    if _cod and conferma_pagamento(
+        cod_trans   = _cod,
+        esito       = _params.get("esito", "OK"),
+        importo     = _params.get("importo", ""),
+        divisa      = _params.get("divisa", "EUR"),
+        data        = _params.get("data", ""),
+        orario      = _params.get("orario", ""),
+        mac_ricevuto= _params.get("mac", ""),
+    ):
         crediti_aggiornati = get_crediti(st.session_state.user["id"])
         st.session_state.user["credits"] = crediti_aggiornati
         st.query_params.clear()
         st.success(f"✅ Pagamento confermato! Ora hai **{crediti_aggiornati} crediti**.")
+elif _params.get("xpay_ko") == "1":
+    st.query_params.clear()
+    st.error("❌ Pagamento annullato o non andato a buon fine. Riprova.")
 
 # ──────────────────────────────────────────────────────────────
 # HEADER NEXI
@@ -724,22 +735,40 @@ if _user:
     if st.session_state.auth_tab == "buy":
         with st.expander("💳 Acquista crediti", expanded=True):
             st.markdown("Ogni ricerca consuma **1 credito**. Scegli il pacchetto:")
+            _xpay_configurato = bool(
+                os.environ.get("XPAY_ALIAS") and os.environ.get("XPAY_SECRET")
+            )
+            _app_url = "https://merchant-intelligence.streamlit.app"
             for idx, pkg in enumerate(PACCHETTI_CREDITI):
-                _xpay_url = genera_url_pagamento(
-                    _user["id"], idx,
-                    return_url="https://merchant-intelligence.streamlit.app",
-                )
-                if _xpay_url:
+                _costo_per_credito = pkg["centesimi"] / 100 / pkg["crediti"]
+                _badge = ""
+                if pkg["crediti"] >= 100:
+                    _badge = ' <span style="background:#48d597;color:#0f172a;border-radius:4px;padding:1px 6px;font-size:0.70rem;font-weight:700;">CONVENIENTE</span>'
+                if _xpay_configurato:
+                    _xpay_url = genera_url_pagamento(_user["id"], idx, _app_url)
                     st.markdown(
-                        f'<a href="{_xpay_url}" target="_self" style="display:inline-block;'
-                        f'background:#1d4ed8;color:#fff;border-radius:6px;padding:8px 20px;'
-                        f'text-decoration:none;font-weight:600;margin:4px 0;">'
-                        f'💳 {pkg["label"]}</a>',
+                        f'<div style="display:flex;align-items:center;justify-content:space-between;'
+                        f'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);'
+                        f'border-radius:8px;padding:10px 16px;margin:6px 0;">'
+                        f'<div style="color:#fff;font-weight:600;">{pkg["label"]}{_badge}'
+                        f'<span style="color:rgba(255,255,255,0.45);font-size:0.75rem;font-weight:400;'
+                        f'margin-left:8px;">({_costo_per_credito:.2f}€/ricerca)</span></div>'
+                        f'<a href="{_xpay_url}" target="_self" style="background:#1d4ed8;color:#fff;'
+                        f'border-radius:6px;padding:6px 18px;text-decoration:none;font-weight:700;'
+                        f'font-size:0.88rem;white-space:nowrap;">{pkg["prezzo"]} →</a></div>',
                         unsafe_allow_html=True,
                     )
                 else:
-                    st.warning("XPay non configurato. Contatta l'amministratore.")
-                    break
+                    st.markdown(
+                        f'<div style="display:flex;align-items:center;justify-content:space-between;'
+                        f'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);'
+                        f'border-radius:8px;padding:10px 16px;margin:6px 0;">'
+                        f'<div style="color:#fff;font-weight:600;">{pkg["label"]}{_badge}</div>'
+                        f'<span style="color:rgba(255,255,255,0.45);font-size:0.82rem;">{pkg["prezzo"]}</span></div>',
+                        unsafe_allow_html=True,
+                    )
+            if not _xpay_configurato:
+                st.warning("Pagamento non ancora attivo — configura XPAY_ALIAS e XPAY_SECRET nei secrets.")
             if st.button("Chiudi", key="btn_close_buy"):
                 st.session_state.auth_tab = ""
                 st.rerun()
