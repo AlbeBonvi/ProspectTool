@@ -189,10 +189,10 @@ def genera_url_pagamento(user_id: str, pacchetto_idx: int, return_url: str):
     importo   = str(pkg["centesimi"])   # centesimi interi: €2,00 → "200"
     divisa    = "978"                   # XPay HPP: codice ISO 4217 numerico (EUR = 978)
     base_ret  = return_url.rstrip("/")
-    ok_url    = f"{base_ret}?xpay_ok=1"
-    ko_url    = f"{base_ret}?xpay_ko=1"
+    # URL puliti senza query params — XPay aggiunge esito=OK/KO e codTrans
+    ok_url    = base_ret
+    ko_url    = base_ret
 
-    # MAC con URL puliti (XPay decodifica i param e ri-splitta su &)
     mac = _xpay_mac_request(alias, importo, divisa, cod_trans, ok_url, ko_url, secret)
 
     if _sb_ok():
@@ -214,7 +214,6 @@ def genera_url_pagamento(user_id: str, pacchetto_idx: int, return_url: str):
 
     sandbox = os.environ.get("XPAY_SANDBOX", "true").lower() == "true"
     base    = XPAY_SANDBOX_URL if sandbox else XPAY_LIVE_URL
-    # url e urlpost URL-encoded così il & interno non rompe il parsing
     params  = (f"alias={alias}&importo={importo}&divisa={divisa}"
                f"&codTrans={cod_trans}"
                f"&url={quote(ok_url, safe='')}"
