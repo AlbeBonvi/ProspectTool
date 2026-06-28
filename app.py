@@ -447,6 +447,51 @@ st.markdown("""
   .nexi-footer a { color: #0891b2; text-decoration: none; }
 
   /* ══════════════════════════════════════════════
+     TAB AUTH (Accedi / Registrati) — contrasto su sfondo scuro
+     ══════════════════════════════════════════════ */
+  [data-testid="stTabs"] [data-baseweb="tab-list"] {
+    background: transparent !important;
+    border-bottom: 2px solid rgba(255,255,255,0.20) !important;
+    gap: 4px;
+  }
+  [data-testid="stTabs"] [data-baseweb="tab"] {
+    background: rgba(255,255,255,0.08) !important;
+    border-radius: 6px 6px 0 0 !important;
+    padding: 8px 24px !important;
+    color: rgba(255,255,255,0.70) !important;
+    font-weight: 600 !important;
+    font-size: 0.88rem !important;
+    border: 1px solid rgba(255,255,255,0.15) !important;
+    border-bottom: none !important;
+    transition: background 0.15s, color 0.15s !important;
+  }
+  [data-testid="stTabs"] [data-baseweb="tab"]:hover {
+    background: rgba(255,255,255,0.16) !important;
+    color: #ffffff !important;
+  }
+  [data-testid="stTabs"] [aria-selected="true"] {
+    background: #1d4ed8 !important;
+    color: #ffffff !important;
+    border-color: #1d4ed8 !important;
+  }
+  /* Pannello sotto le tab */
+  [data-testid="stTabs"] [data-baseweb="tab-panel"] {
+    background: rgba(255,255,255,0.04) !important;
+    border-radius: 0 6px 6px 6px !important;
+    border: 1px solid rgba(255,255,255,0.12) !important;
+    padding: 1rem !important;
+  }
+  /* Testo e label dentro le tab sul fondo scuro */
+  [data-testid="stTabs"] label,
+  [data-testid="stTabs"] p {
+    color: rgba(255,255,255,0.85) !important;
+  }
+  /* Niente rosso: success e error messages */
+  [data-testid="stAlert"][data-baseweb="notification"] {
+    border-left-color: #48d597 !important;
+  }
+
+  /* ══════════════════════════════════════════════
      LENTE ANIMATA — appare durante l'analisi
      ══════════════════════════════════════════════ */
   @keyframes lens-scan {
