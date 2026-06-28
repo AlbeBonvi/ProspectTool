@@ -840,6 +840,8 @@ if avvia:
                 unsafe_allow_html=True,
             )
             st.stop()
+        elif _saldo == 1:
+            st.warning("⚠️ Ti rimane solo **1 credito**. Ricaricane altri per continuare ad usare il tool.")
 
     # ── Lente animata ─────────────────────────────────────────
     _lens_slot = st.empty()
