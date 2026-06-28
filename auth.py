@@ -189,9 +189,10 @@ def genera_form_pagamento(user_id: str, pacchetto_idx: int, return_url: str) -> 
     importo   = str(pkg["centesimi"])
     divisa    = "978"
     base_ret  = return_url.rstrip("/")
-    ok_url = base_ret
+    ok_url = f"{base_ret}?xpay_ok=1"
+    ko_url = f"{base_ret}?xpay_ko=1"
 
-    mac = _xpay_mac_request(alias, importo, divisa, cod_trans, ok_url, "", secret)
+    mac = _xpay_mac_request(alias, importo, divisa, cod_trans, ok_url, ko_url, secret)
 
     if _sb_ok():
         try:
@@ -212,14 +213,15 @@ def genera_form_pagamento(user_id: str, pacchetto_idx: int, return_url: str) -> 
 
     sandbox = os.environ.get("XPAY_SANDBOX", "true").lower() == "true"
     action  = XPAY_SANDBOX_URL if sandbox else XPAY_LIVE_URL
-
+    from urllib.parse import quote
     return {
         "action":    action,
         "alias":     alias,
         "importo":   importo,
         "divisa":    divisa,
         "codTrans":  cod_trans,
-        "url":       ok_url,
+        "url":       quote(ok_url, safe=''),
+        "urlpost":   quote(ko_url, safe=''),
         "mac":       mac,
         "languageId": "ITA",
     }
