@@ -743,11 +743,6 @@ if _user:
                 os.environ.get("XPAY_ALIAS") and os.environ.get("XPAY_SECRET")
             )
             _app_url = "https://merchant-intelligence.streamlit.app"
-            # DEBUG TEMPORANEO — rimuovere dopo il test
-            with st.expander("🔧 Debug MAC (solo test)", expanded=False):
-                _test_url = genera_url_pagamento(_user["id"], 0, _app_url)
-                st.code(_test_url or "URL non generato")
-                st.caption(f"ALIAS: {os.environ.get('XPAY_ALIAS','—')} | SECRET (primi 6): {os.environ.get('XPAY_SECRET','—')[:6]}")
             for idx, pkg in enumerate(PACCHETTI_CREDITI):
                 _costo_per_credito = pkg["centesimi"] / 100 / pkg["crediti"]
                 _conveniente = pkg["crediti"] >= 100
