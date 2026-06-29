@@ -15,7 +15,7 @@ import os
 from prospect import (valida_piva, verifica_piva, cerca_pec,
                       analizza_sito, cerca_news, cerca_portfolio_agenzia,
                       stima_volumi_ai, genera_suggerimenti_pitch,
-                      analisi_ai_merchant)
+                      analisi_ai_merchant, estrai_piva_dal_sito)
 from auth import (verifica_credenziali, registra_utente,
                   get_crediti, scala_credito,
                   genera_url_pagamento, genera_form_pagamento,
@@ -816,21 +816,13 @@ else:
 # FORM DI INPUT (solo utenti loggati)
 # ──────────────────────────────────────────────────────────────
 
-col_piva, col_url, col_btn = st.columns([2, 3, 1.2])
-
-with col_piva:
-    piva_input = st.text_input(
-        "Partita IVA",
-        placeholder="Es. 01639620994",
-        max_chars=11,
-        help="Inserisci le 11 cifre della Partita IVA italiana",
-    )
+col_url, col_btn = st.columns([5, 1.2])
 
 with col_url:
     url_input = st.text_input(
         "URL sito web",
         placeholder="Es. www.eshirt.it",
-        help="Analizza piattaforma e-commerce, PSP e contatti pubblici del sito",
+        help="Inserisci l'URL del sito — la Partita IVA verrà recuperata automaticamente",
     )
 
 with col_btn:
@@ -845,16 +837,11 @@ with col_btn:
 
 if avvia:
 
-    piva = piva_input.strip().replace(" ", "").replace("-", "").replace(".", "")
-
-    if not piva:
-        st.error("Inserisci una Partita IVA prima di procedere.")
+    if not url_input.strip():
+        st.error("Inserisci l'URL del sito prima di procedere.")
         st.stop()
 
-    ok, motivo = valida_piva(piva)
-    if not ok:
-        st.error(f"Partita IVA non valida: {motivo}")
-        st.stop()
+    piva = ""
 
     # ── Controllo crediti ─────────────────────────────────────
     _u = st.session_state.get("user")
@@ -897,33 +884,39 @@ if avvia:
     analisi         = None
     notizie         = []
 
-    _aggiorna_lente("Interrogo il registro VIES — Agenzia delle Entrate…")
-    with st.spinner("Interrogo il registro VIES — Agenzia delle Entrate…"):
-        try:
-            ragione_sociale, stato, indirizzo = verifica_piva(piva)
-        except req_lib.exceptions.Timeout:
-            errore_vies = "VIES non ha risposto (timeout)."
-        except req_lib.exceptions.ConnectionError:
-            errore_vies = "Connessione non disponibile."
-        except Exception as e:
-            errore_vies = str(e)
-
-    _aggiorna_lente("Ricerca PEC nel registro INI-PEC…")
-    with st.spinner("Ricerca PEC nel registro INI-PEC…"):
-        try:
-            pec = cerca_pec(piva)
-        except req_lib.exceptions.Timeout:
-            errore_pec = "INI-PEC non ha risposto (timeout)."
-        except req_lib.exceptions.ConnectionError:
-            errore_pec = "Connessione non disponibile."
-        except Exception as e:
-            errore_pec = str(e)
-
     url_pulito = url_input.strip()
-    if url_pulito:
-        _aggiorna_lente(f"Scansione sito {url_pulito}…")
-        with st.spinner(f"Analizzo il sito {url_pulito}…"):
-            analisi = analizza_sito(url_pulito)
+    _aggiorna_lente(f"Scansione sito {url_pulito}…")
+    with st.spinner(f"Analizzo il sito {url_pulito}…"):
+        analisi = analizza_sito(url_pulito)
+
+    # Estrai P.IVA dal sito
+    if analisi and analisi.get("raggiungibile"):
+        _aggiorna_lente("Ricerca Partita IVA nel sito…")
+        _html_totale = analisi.get("_html_home", "")
+        piva = estrai_piva_dal_sito(_html_totale) or ""
+
+    if piva:
+        _aggiorna_lente("Interrogo il registro VIES — Agenzia delle Entrate…")
+        with st.spinner("Interrogo il registro VIES — Agenzia delle Entrate…"):
+            try:
+                ragione_sociale, stato, indirizzo = verifica_piva(piva)
+            except req_lib.exceptions.Timeout:
+                errore_vies = "VIES non ha risposto (timeout)."
+            except req_lib.exceptions.ConnectionError:
+                errore_vies = "Connessione non disponibile."
+            except Exception as e:
+                errore_vies = str(e)
+
+        _aggiorna_lente("Ricerca PEC nel registro INI-PEC…")
+        with st.spinner("Ricerca PEC nel registro INI-PEC…"):
+            try:
+                pec = cerca_pec(piva)
+            except req_lib.exceptions.Timeout:
+                errore_pec = "INI-PEC non ha risposto (timeout)."
+            except req_lib.exceptions.ConnectionError:
+                errore_pec = "Connessione non disponibile."
+            except Exception as e:
+                errore_pec = str(e)
 
     _aggiorna_lente("Cerco notizie recenti sul merchant…")
     with st.spinner("Cerco le ultime notizie sul merchant…"):

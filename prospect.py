@@ -32,6 +32,32 @@ import xml.etree.ElementTree as ET
 # che la P.IVA abbia il formato giusto e superi il test
 # matematico che la legge italiana richiede.
 
+def estrai_piva_dal_sito(html: str) -> str | None:
+    """
+    Cerca la P.IVA italiana (11 cifre) nel codice HTML del sito.
+    Ritorna la prima P.IVA valida trovata, oppure None.
+    """
+    # Pattern: keyword P.IVA seguita da (opzionale IT) + 11 cifre
+    pattern = re.compile(
+        r'(?:p\.?\s*iva|partita\s+iva|vat\s*(?:id|n(?:umber)?)|vatID|tax\s*id)'
+        r'[^\d]{0,20}(?:IT\s*)?(\d[\s\d]{9,12}\d)',
+        re.I
+    )
+    for m in pattern.finditer(html):
+        candidato = re.sub(r'\s', '', m.group(1))[:11]
+        ok, _ = valida_piva(candidato)
+        if ok:
+            return candidato
+
+    # Fallback: qualsiasi sequenza di 11 cifre preceduta da "IT" (schema VAT europeo)
+    for m in re.finditer(r'\bIT(\d{11})\b', html, re.I):
+        ok, _ = valida_piva(m.group(1))
+        if ok:
+            return m.group(1)
+
+    return None
+
+
 def valida_piva(piva):
     """
     Controlla formato e cifra di controllo di una P.IVA italiana.
@@ -898,6 +924,7 @@ def analizza_sito(url_input):
 
     risultati["raggiungibile"] = True
     risultati["url_analizzati"].append(url_input)
+    risultati["_html_home"] = html_home
     html_totale = html_home  # accumuliamo tutto l'HTML scaricato qui
     parsed_base = urllib.parse.urlparse(url_input)
 
